@@ -26,6 +26,7 @@ contract projectX is Ownable, IERC20 {
     struct SP {
       uint256 BNB_reward;
       uint256 BNB_reserve;
+      uint256 BNB_prev_reward;
       //uint256 token_reward; -> this is the reward_pool from the balancer
       uint256 token_reserve;
     }
@@ -318,20 +319,16 @@ contract projectX is Ownable, IERC20 {
       }
     }
 
-    //@dev individual reward is growing linearly througout 24h, and is the portion of the reward pool
-    //     weighted by the "free" (ie non-pool non-death) supply owned.
-    //     reward = (balance/free supply) * [(now - lastClaim) / 1d] * BNB_balance
-    //     If an extra-buy occurs in the last 24h, delay those extra token for the next cycle (in sell tax)
-    //     returns net reward and tax on the reward
+    //@dev 
     function computeReward() public view returns(uint256, uint256 tax_to_pay) {
 
       past_tx memory sender_last_tx = _last_tx[msg.sender];
 
       address DEAD = address(0x000000000000000000000000000000000000dEaD);
 
-      uint256 time_factor = block.timestamp - sender_last_tx.last_claim > 1 days ? 1 : (block.timestamp - sender_last_tx.last_claim);
+      uint256 time_factor = block.timestamp - sender_last_tx.last_claim > 1 days ? 1 days : (block.timestamp - sender_last_tx.last_claim);
 
-      // sell > buy during that 24h ?
+      // sell > buy+init_bal during last 24h ?
       uint256 balance_without_buffer = sender_last_tx.reward_buffer >= _balances[msg.sender] ? 0 : _balances[msg.sender] - sender_last_tx.reward_buffer;
 
       uint256 claimable_supply = totalSupply() - _balances[DEAD] - _balances[address(pair)];
@@ -357,6 +354,7 @@ contract projectX is Ownable, IERC20 {
 
     //@dev frontend integration
     function endOfGrowingPhase() external view returns (uint256) {
+
       return 1;
     }
 
@@ -367,7 +365,21 @@ contract projectX is Ownable, IERC20 {
       smart_pool_balances.BNB_reward -= (claimable+tax);
       smart_pool_balances.BNB_reserve += tax;
       _last_tx[msg.sender].reward_buffer = 0;
+      _last_tx[msg.sender].last_claim = block.timestamp;
       safeTransferETH(msg.sender, claimable);
+    }
+
+    function smartPoolCheck() internal {
+      SP _smart_pool_bal = smart_pool_balances;
+
+      if (_smart_pool_bal.BNB_reward > _smart_pool_bal.BNB_reserve * excess_rate) {
+        smart_pool_balances.BNB_reward += _smart_pool_balances.BNB_reserve * minor_fill / 100;
+        smart_pool_balances.BNB_reserve -= _smart_pool_balances.BNB_reserve * minor_fill / 10;
+      }
+      if (_smart_pool_balances.BNB_reward > _smart_pool_balances.BNB_prev_reward) {
+        //do things
+      }
+      //Update prev BNB_rew
     }
 
     function swapForBNB(uint256 token_amount, address receiver) internal returns (uint256) {
@@ -463,9 +475,11 @@ contract projectX is Ownable, IERC20 {
       reward_rate = new_periodicity;
     }
 
-    pcs_pool_to_circ_ratio
+    //pcs_pool_to_circ_ratio
 
-    smart_pool_freq
+    //smart_pool_freq
+
+    //other? check 
 
     //@dev fallback in order to receive BNB from swapToBNB
     receive () external payable {}
