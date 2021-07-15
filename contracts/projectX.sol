@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL - @DrGorilla_md (Tg/Twtr)
-// ----           DO NOT FOR SOLC < 0.8.0          ----
+// ----           DO NOT CLONE WITH SOLC < 0.8.0          ----
 
 pragma solidity 0.8.0;
 
@@ -63,7 +63,7 @@ contract projectX is Ownable, IERC20 {
     bool private liq_swap_reentrancy_guard;
     bool private reward_swap_reentrancy_guard;
 
-    string private _name = "Project X";
+    string private _name = "ProjectX";
     string private _symbol = "X";
 
     address public LP_recipient;

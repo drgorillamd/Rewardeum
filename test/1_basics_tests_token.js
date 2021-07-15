@@ -1,9 +1,10 @@
-const Token = artifacts.require("iBNB");
+const Token = artifacts.require("projectX");
 const truffleCost = require('truffle-cost');
 const truffleAssert = require('truffle-assertions');
+const BN = require('bn.js');
+require('chai').use(require('chai-bn')(BN)).should();
+
 const routerAddress = "0x10ED43C718714eb63d5aA57B78B54704E256024E";
-
-
 
 contract("Basic tests", accounts => {
 
@@ -15,13 +16,20 @@ contract("Basic tests", accounts => {
     it("Initialized - return proper name()", async () => {
       const x = await Token.deployed();
       const obs_name = await x.name();
-      assert.equal(obs_name, "iBNB", "incorrect name returned")
+      assert.equal(obs_name, "ProjectX", "incorrect name returned")
     });
 
     it("deployer = owner", async () => {
       const x = await Token.deployed();
       const owned_by = await x.owner.call();
       assert.equal(accounts[0], owned_by, "Owner is not account[0]");
+    });
+
+    it("tot supply in owner", async () => {
+      const x = await Token.deployed();
+      const bal = await x.balanceOf.call(accounts[0]);
+      const theo = await x.totalSupply.call();
+      bal.should.be.a.bignumber.that.equals(theo);
     });
   });
 
