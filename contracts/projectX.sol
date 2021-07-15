@@ -43,6 +43,9 @@ contract projectX is Ownable, IERC20 {
 
     uint8 private _decimals = 9;
     uint8 public pcs_pool_to_circ_ratio = 10;
+    uint8 public excess_rate = 50;
+    uint8 public minor_fill = 10;
+    uint8 public resplenish_factor = 10;
 
     uint32 public reward_rate = 1 days;
     uint32 public smart_pool_freq = 1 days;
@@ -78,8 +81,8 @@ contract projectX is Ownable, IERC20 {
     event BalancerPools(uint256,uint256);
     event RewardTaxChanged();
     event AddLiq(string);
-    event balancerReset(uint256, uint256);
-    event smartPool(uint256, uint256);
+    event BalancerReset(uint256, uint256);
+    event Smartpool(uint256, uint256);
 
     constructor (address _router) {
          //create pair to get the pair address
@@ -353,13 +356,13 @@ contract projectX is Ownable, IERC20 {
       else if(amount > 1 ether) { return amount * claiming_taxes_rates[3] / 100; }
       else if(amount > 0.5 ether) { return amount * claiming_taxes_rates[2] / 100; }
       else if(amount > 0.25 ether) { return amount * claiming_taxes_rates[1] / 100; }
-      else { return amount * claiming_taxes_rates[0]) / 100; }
+      else { return amount * claiming_taxes_rates[0] / 100; }
 
     }
 
     //@dev frontend integration
     function endOfWaitingTime() external view returns (uint256) {
-      return sender_last_tx.last_claim;
+      return _last_tx[msg.sender].last_claim;
     }
 
     //@dev tax goes to the smartpool reserve
@@ -374,19 +377,31 @@ contract projectX is Ownable, IERC20 {
       return claimable;
     }
 
+
     function smartPoolCheck() internal {
-      SP _smart_pool_bal = smart_pool_balances;
+      SP memory _smart_pool_bal = smart_pool_balances;
 
-      if (_smart_pool_bal.BNB_reward > _smart_pool_bal.BNB_reserve * excess_rate) {
-        smart_pool_balances.BNB_reward += _smart_pool_balances.BNB_reserve * minor_fill / 100;
-        smart_pool_balances.BNB_reserve -= _smart_pool_balances.BNB_reserve * minor_fill / 10;
+      if (_smart_pool_bal.BNB_reserve > _smart_pool_bal.BNB_reward * excess_rate / 100) {
+        smart_pool_balances.BNB_reward += _smart_pool_bal.BNB_reserve * minor_fill / 100;
+        smart_pool_balances.BNB_reserve -= _smart_pool_bal.BNB_reserve * minor_fill / 100;
       }
-      if (_smart_pool_balances.BNB_reward < _smart_pool_balances.BNB_prev_reward) {
-        //do things
+      if (_smart_pool_bal.BNB_reward < _smart_pool_bal.BNB_prev_reward) {
+        uint256 delta_reward = _smart_pool_bal.BNB_prev_reward - _smart_pool_bal.BNB_reward;
+        if (_smart_pool_bal.BNB_reserve >= delta_reward) {
+          smart_pool_balances.BNB_reward += delta_reward * resplenish_factor / 100;
+          smart_pool_balances.BNB_reserve -= delta_reward * resplenish_factor / 100;
+        }
       }
-      //Update prev BNB_rew
-      //update last_smartpool_check
+      
+      smart_pool_balances.BNB_prev_reward = _smart_pool_bal.BNB_reward;
+      last_smartpool_check = block.timestamp;
 
+      emit Smartpool(smart_pool_balances.BNB_reward, smart_pool_balances.BNB_reserve);
+
+    }
+
+    function forceSmartpoolCheck() external onlyOwner {
+      smartPoolCheck();
     }
 
     function swapForBNB(uint256 token_amount, address receiver) internal returns (uint256) {
@@ -433,7 +448,7 @@ contract projectX is Ownable, IERC20 {
       uint256 _contract_balance = _balances[address(this)];
       balancer_balances.reward_pool = _contract_balance / 2;
       balancer_balances.liquidity_pool = _contract_balance / 2;
-      emit balancerReset(balancer_balances.reward_pool, balancer_balances.liquidity_pool);
+      emit BalancerReset(balancer_balances.reward_pool, balancer_balances.liquidity_pool);
     }
 
     //@dev will bypass all the taxes and act as erc20.
@@ -482,9 +497,15 @@ contract projectX is Ownable, IERC20 {
       reward_rate = new_periodicity;
     }
 
+    
+    //Setter TODO
     //pcs_pool_to_circ_ratio
 
     //smart_pool_freq
+
+    //excess_rate
+    //minor_fill
+    //resplenish_factor
 
     //other? check 
 
