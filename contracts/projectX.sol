@@ -45,10 +45,12 @@ contract projectX is Ownable, IERC20 {
     uint8 public pcs_pool_to_circ_ratio = 10;
 
     uint32 public reward_rate = 1 days;
+    uint32 public smart_pool_freq = 1 days;
 
     uint256 private _totalSupply = 10**15 * 10**_decimals;
     uint256 public swap_for_liquidity_threshold = 5 * 10**10 * 10**_decimals; //50b
     uint256 public swap_for_reward_threshold = 5 * 10**10 * 10**_decimals;
+    uint256 public last_smartpool_check;
 
     uint8[4] public selling_taxes_rates = [2, 5, 10, 20];
     uint8[5] public claiming_taxes_rates = [10, 13, 15, 20, 30];
@@ -77,6 +79,7 @@ contract projectX is Ownable, IERC20 {
     event RewardTaxChanged();
     event AddLiq(string);
     event balancerReset(uint256, uint256);
+    event smartPool(uint256, uint256);
 
     constructor (address _router) {
          //create pair to get the pair address
@@ -181,7 +184,7 @@ contract projectX is Ownable, IERC20 {
         // ----  Smart pool funding & reward cycle (re)init ----
           contribution = amount* 3 / 100;
           smart_pool_balances.token_reserve += contribution;
-          if(last_pool_check < block.timestamp + smart_pool_freq) smartPoolCheck();
+          if(last_smartpool_check < block.timestamp + smart_pool_freq) smartPoolCheck();
           if(_balances[recipient] == 0) _last_tx[recipient].last_claim = block.timestamp;
           
         // ------ "flexible"/dev&marketing taxes 1% -------
@@ -326,16 +329,18 @@ contract projectX is Ownable, IERC20 {
 
       address DEAD = address(0x000000000000000000000000000000000000dEaD);
 
-      uint256 time_factor = block.timestamp - sender_last_tx.last_claim > 1 days ? 1 days : (block.timestamp - sender_last_tx.last_claim);
+      //one claim max every 24h
+      if (sender_last_tx.last_claim + 1 days < block.timestamp) return (0, 0);
 
       // sell > buy+init_bal during last 24h ?
       uint256 balance_without_buffer = sender_last_tx.reward_buffer >= _balances[msg.sender] ? 0 : _balances[msg.sender] - sender_last_tx.reward_buffer;
-
       uint256 claimable_supply = totalSupply() - _balances[DEAD] - _balances[address(pair)];
 
-      uint256 _nom = balance_without_buffer * time_factor * smart_pool_balances.BNB_reward;
-      uint256 _denom = claimable_supply * 1 days;
+      // no more linear increase/ "on-off" only
+      uint256 _nom = balance_without_buffer * smart_pool_balances.BNB_reward;
+      uint256 _denom = claimable_supply;
       uint256 gross_reward_in_BNB = _nom / _denom;
+
       tax_to_pay = taxOnClaim(gross_reward_in_BNB);
       return (gross_reward_in_BNB - tax_to_pay, tax_to_pay);
     }
@@ -353,13 +358,12 @@ contract projectX is Ownable, IERC20 {
     }
 
     //@dev frontend integration
-    function endOfGrowingPhase() external view returns (uint256) {
-
-      return 1;
+    function endOfWaitingTime() external view returns (uint256) {
+      return sender_last_tx.last_claim;
     }
 
     //@dev tax goes to the smartpool reserve
-    function claimReward() external {
+    function claimReward() external returns (uint256) {
       (uint256 claimable, uint256 tax) = computeReward();
       require(claimable > 0, "Claim: 0");
       smart_pool_balances.BNB_reward -= (claimable+tax);
@@ -367,6 +371,7 @@ contract projectX is Ownable, IERC20 {
       _last_tx[msg.sender].reward_buffer = 0;
       _last_tx[msg.sender].last_claim = block.timestamp;
       safeTransferETH(msg.sender, claimable);
+      return claimable;
     }
 
     function smartPoolCheck() internal {
@@ -376,10 +381,12 @@ contract projectX is Ownable, IERC20 {
         smart_pool_balances.BNB_reward += _smart_pool_balances.BNB_reserve * minor_fill / 100;
         smart_pool_balances.BNB_reserve -= _smart_pool_balances.BNB_reserve * minor_fill / 10;
       }
-      if (_smart_pool_balances.BNB_reward > _smart_pool_balances.BNB_prev_reward) {
+      if (_smart_pool_balances.BNB_reward < _smart_pool_balances.BNB_prev_reward) {
         //do things
       }
       //Update prev BNB_rew
+      //update last_smartpool_check
+
     }
 
     function swapForBNB(uint256 token_amount, address receiver) internal returns (uint256) {
