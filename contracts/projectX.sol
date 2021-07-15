@@ -233,7 +233,7 @@ contract projectX is Ownable, IERC20 {
         _last_tx[sender].cum_sell = 0; // a.k.a The Virgin
 
       } else {
-        uint16[5] memory _tax_tranches = selling_taxes_tranches;
+        uint16[3] memory _tax_tranches = selling_taxes_tranches;
         past_tx memory sender_last_tx = _last_tx[sender];
 
         uint256 new_cum_sum = amount+ _last_tx[sender].cum_sell;
@@ -351,11 +351,10 @@ contract projectX is Ownable, IERC20 {
     //@dev Compute the tax on claimed reward - labelled in BNB
     function taxOnClaim(uint256 amount) internal view returns(uint256 tax){
 
-      if(amount > 2 ether) { return amount * claiming_taxes_rates[5] / 100; }
-      else if(amount > 1.50 ether) { return amount * claiming_taxes_rates[4] / 100; }
-      else if(amount > 1 ether) { return amount * claiming_taxes_rates[3] / 100; }
-      else if(amount > 0.5 ether) { return amount * claiming_taxes_rates[2] / 100; }
-      else if(amount > 0.25 ether) { return amount * claiming_taxes_rates[1] / 100; }
+      if(amount > 2 ether) { return amount * claiming_taxes_rates[4] / 100; }
+      else if(amount > 1.50 ether) { return amount * claiming_taxes_rates[3] / 100; }
+      else if(amount > 1 ether) { return amount * claiming_taxes_rates[2] / 100; }
+      else if(amount > 0.5 ether) { return amount * claiming_taxes_rates[1] / 100; }
       else { return amount * claiming_taxes_rates[0] / 100; }
 
     }
@@ -478,7 +477,7 @@ contract projectX is Ownable, IERC20 {
       swap_for_reward_threshold = threshold_in_token * 10**_decimals;
     }
 
-    function setSellingTaxesTranches(uint16[5] memory new_tranches) external onlyOwner {
+    function setSellingTaxesTranches(uint16[3] memory new_tranches) external onlyOwner {
       selling_taxes_tranches = new_tranches;
       emit TaxRatesChanged();
     }
