@@ -42,7 +42,8 @@ contract projectX is Ownable, IERC20 {
     mapping (address => bool) private excluded;
 
     uint8 private _decimals = 9;
-    uint8 public pcs_pool_to_circ_ratio = 10;
+    uint8 public pcs_pool_to_circ_ratio = 10;  //TODO setter + new values
+
     uint8 public excess_rate = 50;
     uint8 public minor_fill = 10;
     uint8 public resplenish_factor = 10;
@@ -186,17 +187,17 @@ contract projectX is Ownable, IERC20 {
           }
 
         // ----  Smart pool funding & reward cycle (re)init ----
-          contribution = amount* 3 / 100;
+          contribution = amount* 5 / 100;  //TODO setter 
           smart_pool_balances.token_reserve += contribution;
           if(last_smartpool_check < block.timestamp + smart_pool_freq) smartPoolCheck();
           if(_balances[recipient] == 0) _last_tx[recipient].last_claim = block.timestamp;
           
         // ------ "flexible"/dev&marketing taxes 1% -------
-          dev_tax = amount / 100;
+          dev_tax = amount / 100; //TODO setter 
           mkt_tax = amount / 100;
 
-        // ------ balancer tax 10% ------
-          balancer_amount = amount/ 10;
+        // ------ balancer tax 8% ------
+          balancer_amount = amount * 8 / 100; //TODO setter
           balancer(balancer_amount, _reserve0);
 
         // ----- reward buffer -----
@@ -404,6 +405,8 @@ contract projectX is Ownable, IERC20 {
       smartPoolCheck();
     }
 
+    //@dev set the reward (BNB) pool balance, rest of the contract's balance is the reserve
+    //will mostly (hopefully) be used on first cycle
     function smartpoolOverride(uint256 reward) external onlyOwner {
       require(address(this).balance >= reward, "SPOverride: inf to contract balance");
       smart_pool_balances.BNB_reserve = address(this).balance - reward;
