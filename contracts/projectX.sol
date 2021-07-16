@@ -77,12 +77,13 @@ contract projectX is Ownable, IERC20 {
     SP public smart_pool_balances;
 
     event TaxRatesChanged();
-    event SwapForBNB(string);
-    event BalancerPools(uint256,uint256);
+    event SwapForBNB(string status);
+    event BalancerPools(uint256 reward_liq_pool, uint256 reward_token_pool);
     event RewardTaxChanged();
-    event AddLiq(string);
-    event BalancerReset(uint256, uint256);
-    event Smartpool(uint256, uint256);
+    event AddLiq(string status);
+    event BalancerReset(uint256 new_reward_token_pool, uint256 new_reward_liq_pool);
+    event Smartpool(uint256 reward, uint256 reserve);
+    event SmartpoolOverride(uint256 new_reward, uint256 new_reserve);
 
     constructor (address _router) {
          //create pair to get the pair address
@@ -403,6 +404,13 @@ contract projectX is Ownable, IERC20 {
       smartPoolCheck();
     }
 
+    function smartpoolOverride(uint256 reward) external onlyOwner {
+      require(address(this).balance >= reward, "SPOverride: inf to contract balance");
+      smart_pool_balances.BNB_reserve = address(this).balance - reward;
+      smart_pool_balances.BNB_reward = reward;
+      emit SmartpoolOverride(reward, address(this).balance - reward);
+    }
+
     function swapForBNB(uint256 token_amount, address receiver) internal returns (uint256) {
       address[] memory route = new address[](2);
       route[0] = address(this);
@@ -505,6 +513,8 @@ contract projectX is Ownable, IERC20 {
     //excess_rate
     //minor_fill
     //resplenish_factor
+
+    //smartpool override
 
     //other? check 
 
