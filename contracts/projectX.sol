@@ -61,8 +61,7 @@ contract projectX is Ownable, IERC20 {
     uint16[3] public selling_taxes_tranches = [200, 500, 1000]; // % and div by 10000 0.012% -0.025% -(...)
 
     bool public circuit_breaker;
-    bool private liq_swap_reentrancy_guard;
-    bool private reward_swap_reentrancy_guard;
+    bool private swap_reentrancy_guard;
 
     string private _name = "ProjectX";
     string private _symbol = "X";
@@ -220,7 +219,7 @@ contract projectX is Ownable, IERC20 {
         _balances[sender] = senderBalance - amount;
         _balances[recipient] += amount - sell_tax - dev_tax - mkt_tax - balancer_amount - contribution;
 
-        emit Transfer(sender, recipient, amount);
+        emit Transfer(sender, recipient, amount- sell_tax - dev_tax - mkt_tax - balancer_amount - contribution);
         emit Transfer(sender, address(this), sell_tax);
         emit Transfer(sender, address(this), balancer_amount);
         emit Transfer(sender, devWallet, dev_tax);
@@ -236,7 +235,6 @@ contract projectX is Ownable, IERC20 {
 
       } else {
         uint16[3] memory _tax_tranches = selling_taxes_tranches;
-        past_tx memory sender_last_tx = _last_tx[sender];
 
         uint256 new_cum_sum = amount+ _last_tx[sender].cum_sell;
 
@@ -271,26 +269,26 @@ contract projectX is Ownable, IERC20 {
 
         uint256 circ_supply = (pool_balance < unwght_circ_supply * pcs_pool_to_circ_ratio / 100) ? unwght_circ_supply * pcs_pool_to_circ_ratio / 100 : pool_balance;
 
-
+        //TODO retest :
         balancer_balances.liquidity_pool += ((amount * (circ_supply - pool_balance)) * 10**9 / circ_supply) / 10**9;
-        balancer_balances.reward_pool += ((amount * (circ_supply - circ_supply - pool_balance)) * 10**9 / circ_supply) / 10**9;
+        balancer_balances.reward_pool += ((amount * pool_balance) * 10**9 / circ_supply) / 10**9;
 
         prop_balances memory _balancer_balances = balancer_balances;
 
-        if(_balancer_balances.liquidity_pool >= swap_for_liquidity_threshold && !liq_swap_reentrancy_guard) {
-            liq_swap_reentrancy_guard = true;
-            uint256 token_out = addLiquidity(_balancer_balances.liquidity_pool);
-            balancer_balances.liquidity_pool -= token_out; //not balanceOf, in case addLiq revert
-            liq_swap_reentrancy_guard = false;
+        if(_balancer_balances.liquidity_pool >= swap_for_liquidity_threshold && !swap_reentrancy_guard) {
+            swap_reentrancy_guard = true;
+            uint256 token_out = addLiquidity(_balancer_balances.liquidity_pool); //returns 0 if fail
+            balancer_balances.liquidity_pool -= token_out;
+            swap_reentrancy_guard = false;
         }
 
-        if(_balancer_balances.reward_pool >= swap_for_reward_threshold && !reward_swap_reentrancy_guard) {
-            reward_swap_reentrancy_guard = true;
+        if(_balancer_balances.reward_pool >= swap_for_reward_threshold && !swap_reentrancy_guard) {
+            swap_reentrancy_guard = true;
             uint256 BNB_balance_before = address(this).balance;
-            uint256 token_out = swapForBNB(_balancer_balances.reward_pool, address(this));
-            balancer_balances.reward_pool -= token_out;
+            uint256 token_out = swapForBNB(_balancer_balances.reward_pool, address(this)); //returns 0 if fail
+            balancer_balances.reward_pool -= token_out; 
             smart_pool_balances.BNB_reward += address(this).balance - BNB_balance_before;
-            reward_swap_reentrancy_guard = false;
+            swap_reentrancy_guard = false;
         }
 
         emit BalancerPools(_balancer_balances.liquidity_pool, _balancer_balances.reward_pool);
@@ -306,23 +304,25 @@ contract projectX is Ownable, IERC20 {
       route[0] = address(this);
       route[1] = router.WETH();
 
-      if(allowance(address(this), address(router)) < token_amount) {
-        _allowances[address(this)][address(router)] = ~uint256(0);
-        emit Approval(address(this), address(router), ~uint256(0));
-      }
+      _allowances[address(this)][address(router)] = token_amount;
+      emit Approval(address(this), address(router), token_amount);
       
-      //odd numbers management
+      //odd numbers management -> half is smaller than amount-half
       uint256 half = token_amount / 2;
-      uint256 half_2 = token_amount - half;
       
       try router.swapExactTokensForETHSupportingFeeOnTransferTokens(half, 0, route, address(this), block.timestamp) {
         uint256 BNB_from_Swap = address(this).balance - smart_pool_balance;
-        router.addLiquidityETH{value: BNB_from_Swap}(address(this), half_2, 0, 0, LP_recipient, block.timestamp); //will not be catched
-        emit AddLiq("addLiq: ok");
-        return token_amount;
-      }
-      catch {
-        emit AddLiq("addLiq: fail");
+
+          try router.addLiquidityETH{value: BNB_from_Swap}(address(this), half, 0, 0, LP_recipient, block.timestamp) {
+            emit AddLiq("addLiq: ok");
+            return (token_amount / 2) * 2;
+          } catch {
+            emit AddLiq("addLiq:liq fail");
+            return 0;
+          }
+
+      } catch {
+        emit AddLiq("addLiq:swap fail");
         return 0;
       }
     }
@@ -419,10 +419,8 @@ contract projectX is Ownable, IERC20 {
       route[0] = address(this);
       route[1] = router.WETH();
 
-      if(allowance(address(this), address(router)) < token_amount) {
-        _allowances[address(this)][address(router)] = ~uint256(0);
-        emit Approval(address(this), address(router), ~uint256(0));
-      }
+      _allowances[address(this)][address(router)] = token_amount;
+      emit Approval(address(this), address(router), token_amount);
 
       try router.swapExactTokensForETHSupportingFeeOnTransferTokens(token_amount, 0, route, receiver, block.timestamp) {
         emit SwapForBNB("Swap success");

@@ -5,7 +5,7 @@ const time = require('./helper/timeshift');
 const BN = require('bn.js');
 require('chai').use(require('chai-bn')(BN)).should();
 
-const Token = artifacts.require("iBNB");
+const Token = artifacts.require("projectX");
 const routerContract = artifacts.require('IUniswapV2Router02');
 const pairContract = artifacts.require('IUniswapV2Pair');
 const routerAddress = "0x10ED43C718714eb63d5aA57B78B54704E256024E";
