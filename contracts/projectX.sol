@@ -36,19 +36,25 @@ contract projectX is Ownable, IERC20 {
       uint256 liquidity_pool;
     }
 
+    struct taxesRates {
+      uint8 dev;
+      uint8 market;
+      uint8 balancer;
+      uint8 reserve;
+    }
+
+
     mapping (address => uint256) private _balances;
     mapping (address => past_tx) private _last_tx;
     mapping (address => mapping (address => uint256)) private _allowances;
     mapping (address => bool) private excluded;
 
     uint8 private _decimals = 9;
-    uint8 public pcs_pool_to_circ_ratio = 10;  //TODO setter + new values
-
+    uint8 public pcs_pool_to_circ_ratio = 10;
     uint8 public excess_rate = 50;
     uint8 public minor_fill = 10;
     uint8 public resplenish_factor = 10;
 
-    uint32 public reward_rate = 1 days;
     uint32 public smart_pool_freq = 1 days;
 
     uint256 private _totalSupply = 10**15 * 10**_decimals;
@@ -75,6 +81,7 @@ contract projectX is Ownable, IERC20 {
 
     prop_balances private balancer_balances;
     SP public smart_pool_balances;
+    taxesRates public taxes = taxesRates({dev: 1, market: 1, balancer: 10, reserve: 5});
 
     event TaxRatesChanged();
     event SwapForBNB(string status);
@@ -186,17 +193,17 @@ contract projectX is Ownable, IERC20 {
           }
 
         // ----  Smart pool funding & reward cycle (re)init ----
-          contribution = amount* 5 / 100;  //TODO setter 
+          contribution = amount* taxes.reserve / 100;
           smart_pool_balances.token_reserve += contribution;
           if(last_smartpool_check < block.timestamp + smart_pool_freq) smartPoolCheck();
           if(_balances[recipient] == 0) _last_tx[recipient].last_claim = block.timestamp;
           
         // ------ "flexible"/dev&marketing taxes 1% -------
-          dev_tax = amount / 100; //TODO setter 
-          mkt_tax = amount / 100;
+          dev_tax = amount  * taxes.dev / 100;
+          mkt_tax = amount * taxes.market / 100;
 
         // ------ balancer tax 8% ------
-          balancer_amount = amount * 8 / 100; //TODO setter
+          balancer_amount = amount * taxes.balancer / 100;
           balancer(balancer_amount, _reserve0);
 
         // ----- reward buffer -----
@@ -307,7 +314,7 @@ contract projectX is Ownable, IERC20 {
       _allowances[address(this)][address(router)] = token_amount;
       emit Approval(address(this), address(router), token_amount);
       
-      //odd numbers management -> half is smaller than amount-half
+      //odd numbers management -> half is smaller than amount.min(half)
       uint256 half = token_amount / 2;
       
       try router.swapExactTokensForETHSupportingFeeOnTransferTokens(half, 0, route, address(this), block.timestamp) {
@@ -401,19 +408,6 @@ contract projectX is Ownable, IERC20 {
 
     }
 
-    function forceSmartpoolCheck() external onlyOwner {
-      smartPoolCheck();
-    }
-
-    //@dev set the reward (BNB) pool balance, rest of the contract's balance is the reserve
-    //will mostly (hopefully) be used on first cycle
-    function smartpoolOverride(uint256 reward) external onlyOwner {
-      require(address(this).balance >= reward, "SPOverride: inf to contract balance");
-      smart_pool_balances.BNB_reserve = address(this).balance - reward;
-      smart_pool_balances.BNB_reward = reward;
-      emit SmartpoolOverride(reward, address(this).balance - reward);
-    }
-
     function swapForBNB(uint256 token_amount, address receiver) internal returns (uint256) {
       address[] memory route = new address[](2);
       route[0] = address(this);
@@ -438,6 +432,11 @@ contract projectX is Ownable, IERC20 {
         require(success, 'TransferHelper: ETH_TRANSFER_FAILED');
     }
 
+    //@dev fallback in order to receive BNB from swapToBNB
+    receive () external payable {}
+
+    // ------------- Indiv addresses management -----------------
+
     function excludeFromTaxes(address adr) external onlyOwner {
       require(!excluded[adr], "already excluded");
       excluded[adr] = true;
@@ -452,12 +451,29 @@ contract projectX is Ownable, IERC20 {
       return excluded[adr];
     }
 
+    // ---------- In case of emergency, break the glass -------------
+
+    function forceSmartpoolCheck() external onlyOwner {
+      smartPoolCheck();
+    }
+
+    //@dev set the reward (BNB) pool balance, rest of the contract's balance is the reserve
+    //will mostly (hopefully) be used on first cycle
+    function smartpoolOverride(uint256 reward) external onlyOwner {
+      require(address(this).balance >= reward, "SPOverride: inf to contract balance");
+      smart_pool_balances.BNB_reserve = address(this).balance - reward;
+      smart_pool_balances.BNB_reward = reward;
+      emit SmartpoolOverride(reward, address(this).balance - reward);
+    }
+
     function resetBalancer() external onlyOwner {
       uint256 _contract_balance = _balances[address(this)];
       balancer_balances.reward_pool = _contract_balance / 2;
       balancer_balances.liquidity_pool = _contract_balance / 2;
       emit BalancerReset(balancer_balances.reward_pool, balancer_balances.liquidity_pool);
     }
+
+    //  --------------  setters ---------------------
 
     //@dev will bypass all the taxes and act as erc20.
     //     pools & balancer balances will remain untouched
@@ -476,6 +492,13 @@ contract projectX is Ownable, IERC20 {
 
     function setMarketingWallet(address _mktWallet) external onlyOwner {
       mktWallet = _mktWallet;
+    }
+
+    function setTaxRates(uint8 _dev, uint8 _market, uint8 _balancer, uint8 _reserve) external onlyOwner {
+      taxes.dev = _dev;
+      taxes.market = _market;
+      taxes.balancer = _balancer;
+      taxes.reserve = _reserve;
     }
 
     function setSwapFor_Liq_Threshold(uint128 threshold_in_token) external onlyOwner {
@@ -501,24 +524,15 @@ contract projectX is Ownable, IERC20 {
       emit RewardTaxChanged();
     }
 
-    function setRewardRate(uint32 new_periodicity) external onlyOwner {
-      reward_rate = new_periodicity;
+    function setSmartpoolVar(uint8 _excess_rate, uint8 _minor_fill, uint8 _resplenish_factor, uint32 _freq_check) external onlyOwner {
+      excess_rate = _excess_rate;
+      minor_fill = _minor_fill;
+      resplenish_factor = _resplenish_factor;
+      smart_pool_freq = _freq_check;
+    }
+    
+    function setRewardTaxesTranches(uint8 _pcs_pool_to_circ_ratio) external onlyOwner {
+      pcs_pool_to_circ_ratio = _pcs_pool_to_circ_ratio;
     }
 
-    
-    //Setter TODO
-    //pcs_pool_to_circ_ratio
-
-    //smart_pool_freq
-
-    //excess_rate
-    //minor_fill
-    //resplenish_factor
-
-    //smartpool override
-
-    //other? check 
-
-    //@dev fallback in order to receive BNB from swapToBNB
-    receive () external payable {}
 }
