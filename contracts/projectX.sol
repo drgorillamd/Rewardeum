@@ -51,9 +51,9 @@ contract projectX is Ownable, IERC20 {
 
     uint8 private _decimals = 9;
     uint8 public pcs_pool_to_circ_ratio = 10;
-    uint8 public excess_rate = 50;
-    uint8 public minor_fill = 10;
-    uint8 public resplenish_factor = 10;
+    uint8 public excess_rate = 100;
+    uint8 public minor_fill = 5;
+    uint8 public resplenish_factor = 100;
 
     uint32 public smart_pool_freq = 1 days;
 
