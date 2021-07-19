@@ -54,6 +54,7 @@ contract projectX is Ownable, IERC20 {
     uint8 public excess_rate = 100;
     uint8 public minor_fill = 5;
     uint8 public resplenish_factor = 100;
+    uint8 public claim_ratio = 80;
 
     uint32 public smart_pool_freq = 1 days;
 
@@ -63,7 +64,7 @@ contract projectX is Ownable, IERC20 {
     uint256 public last_smartpool_check;
 
     uint8[4] public selling_taxes_rates = [2, 5, 10, 20];
-    uint8[5] public claiming_taxes_rates = [10, 13, 15, 20, 30];
+    uint8[5] public claiming_taxes_rates = [2, 4, 6, 10, 15];
     uint16[3] public selling_taxes_tranches = [200, 500, 1000]; // % and div by 10000 0.012% -0.025% -(...)
 
     bool public circuit_breaker;
@@ -349,7 +350,7 @@ contract projectX is Ownable, IERC20 {
       uint256 claimable_supply = totalSupply() - _balances[DEAD] - _balances[address(pair)];
 
       // no more linear increase/ "on-off" only
-      uint256 _nom = balance_without_buffer * smart_pool_balances.BNB_reward;
+      uint256 _nom = balance_without_buffer * smart_pool_balances.BNB_reward * (claim_ratio / 100);
       uint256 _denom = claimable_supply;
       uint256 gross_reward_in_BNB = _nom / _denom;
 
