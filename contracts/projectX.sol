@@ -350,7 +350,7 @@ contract projectX is Ownable, IERC20 {
       uint256 claimable_supply = totalSupply() - _balances[DEAD] - _balances[address(pair)];
 
       // no more linear increase/ "on-off" only
-      uint256 _nom = balance_without_buffer * smart_pool_balances.BNB_reward * (claim_ratio / 100);
+      uint256 _nom = balance_without_buffer * smart_pool_balances.BNB_reward * claim_ratio / 100;
       uint256 _denom = claimable_supply;
       uint256 gross_reward_in_BNB = _nom / _denom;
 
