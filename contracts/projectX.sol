@@ -199,11 +199,11 @@ contract projectX is Ownable, IERC20 {
           if(last_smartpool_check < block.timestamp + smart_pool_freq) smartPoolCheck();
           if(_balances[recipient] == 0) _last_tx[recipient].last_claim = block.timestamp;
           
-        // ------ "flexible"/dev&marketing taxes 1% -------
+        // ------ "flexible"/dev&marketing taxes -------
           dev_tax = amount  * taxes.dev / 100;
           mkt_tax = amount * taxes.market / 100;
 
-        // ------ balancer tax 8% ------
+        // ------ balancer tax  ------
           balancer_amount = amount * taxes.balancer / 100;
           balancer(balancer_amount, _reserve0);
 

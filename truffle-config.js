@@ -18,7 +18,7 @@
  *
  */
 
-const HDWalletProvider = require("truffle-hdwallet-provider-privkey");
+ const Provider = require('@truffle/hdwallet-provider');
 // const infuraKey = "fj4jll3k.....";
 //
 const fs = require('fs');
@@ -26,7 +26,7 @@ const tmp = fs.readFileSync("/home/drgorilla/Documents/solidity/.private_key_bur
 const tmp2 = fs.readFileSync("/home/drgorilla/Documents/solidity/.private_key_testnet").toString();
 
 const key = [tmp];
-const key_testnet = [tmp2];
+const key_testnet = "0xa4bc629253a82134844b8786e35dc49a553359b3969a84d70e7bc6d13f6314f5";
 
 module.exports = {
   /**
@@ -60,7 +60,7 @@ module.exports = {
       gas: 20000000
     },
     bsc: {
-      provider: () => new HDWalletProvider(key, `https://bsc-dataseed1.binance.org`),
+      provider: () => new Provider(key, `https://bsc-dataseed1.binance.org`),
       network_id: 56,
       confirmations: 5,
       timeoutBlocks: 200,
@@ -68,7 +68,7 @@ module.exports = {
       gas: 20000000
     },
     testnet: {
-      provider: () => new HDWalletProvider(key_testnet, `https://data-seed-prebsc-1-s1.binance.org:8545`),
+      provider: () => new Provider(key_testnet, `https://data-seed-prebsc-1-s1.binance.org:8545`),
       network_id: 97,
       confirmations: 5,
       timeoutBlocks: 200,

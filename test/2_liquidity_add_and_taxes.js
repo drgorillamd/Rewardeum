@@ -4,11 +4,13 @@ const truffleAssert = require('truffle-assertions');
 const routerContract = artifacts.require('IUniswapV2Router02');
 const pairContract = artifacts.require('IUniswapV2Pair');
 const routerAddress = "0x10ED43C718714eb63d5aA57B78B54704E256024E";
+const BN = require('bn.js');
+require('chai').use(require('chai-bn')(BN)).should();
 
 contract("LP and taxes", accounts => {
 
-  const to_send = 1260000;
-  const pool_balance = 10**8;
+  const to_send = '1'+'0'.repeat(22); //1%
+  const pool_balance = '1'+'0'.repeat(23); // 10%
 
   before(async function() {
     const x = await Token.new(routerAddress);
@@ -42,7 +44,7 @@ contract("LP and taxes", accounts => {
       const pair = await pairContract.at(pairAdr);
       const LPBalance = await pair.balanceOf.call(accounts[0]);
 
-      assert.notEqual(LPBalance.toNumber(), 0, "No LP token received");
+      LPBalance.should.be.a.bignumber.that.is.not.null;
     });
 
     it("Circuit Breaker: Disabled", async () => {
@@ -58,26 +60,18 @@ contract("LP and taxes", accounts => {
   //[   0.0125,     250,     500,      750,     1000]	    	     Tranche(% of pool bal)
   describe("Regular transfers", () => {
 
-    it("Transfer standard: single -- 1.26m / 0.0126% of pool", async () => {
+    it("Transfer standard: single -- 1m : 17% ?", async () => {
       const x = await Token.deployed();
-      const to_receive = to_send - (to_send * 0.1); // 10% taxes
+      const to_receive = new BN(to_send - (to_send * 0.17)); // 17% taxes
       const sender = accounts[1];
       const receiver = accounts[2];
       await x.transfer(sender, to_send, { from: accounts[0] });
       await truffleCost.log(x.transfer(receiver, to_send, { from: sender }), 'USD');
       const newBal = await x.balanceOf.call(receiver);
-      assert.equal(newBal.toNumber(), to_receive, "incorrect amount transfered");
+      newBal.should.be.a.bignumber.that.equals(to_receive);
     });
 
-    //@dev /!\ reward pool receive the sell tax as well !!!
-    it("Transfer standard: balancer balances", async () => {
-      const x = await Token.deployed();
-      const bal = await x.balancer_balances.call();
-      const bal_sum = bal[0].toNumber() + bal[1].toNumber()
-      assert.equal(bal_sum, to_send * 99/1000 + (to_send * 2 / 100)-1 , "Incorrect amount transfered to balancer pools");
-    });
-
-    it("Transfer standard: Reward pool status", async () => {
+    it.skip("Transfer standard: Reward pool status", async () => {
       const x = await Token.deployed();
       const totalSupply = await x.totalSupply.call();
 
@@ -89,7 +83,7 @@ contract("LP and taxes", accounts => {
       assert.equal(reward_obs_pool.toNumber(), Math.floor(reward_theo_pool), "incorrect reward pool");
     });
 
-    it("Transfer standard: Liquidity pool status", async () => {
+    it.skip("Transfer standard: Liquidity pool status", async () => {
       const x = await Token.deployed();
       const totalSupply = await x.totalSupply.call();
 
@@ -106,7 +100,7 @@ contract("LP and taxes", accounts => {
     it("Sell", async () => {
       const x = await Token.deployed();
       const router = await routerContract.at(routerAddress);
-      const to_receive = to_send - (to_send * 0.1) - (to_send * 2 / 100); //0.0126%
+      const to_receive = to_send - (to_send * 0.17) - (to_send * 2 / 100);
       const seller = accounts[2];
       const route = [x.address, await router.WETH()]
 
