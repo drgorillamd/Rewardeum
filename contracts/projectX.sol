@@ -347,11 +347,10 @@ contract projectX is Ownable, IERC20 {
 
       // sell > buy+init_bal during last 24h ?
       uint256 balance_without_buffer = sender_last_tx.reward_buffer >= _balances[msg.sender] ? 0 : _balances[msg.sender] - sender_last_tx.reward_buffer;
-      uint256 claimable_supply = totalSupply() - _balances[DEAD] - _balances[address(pair)];
 
       // no more linear increase/ "on-off" only
       uint256 _nom = balance_without_buffer * smart_pool_balances.BNB_reward * claim_ratio;
-      uint256 _denom = claimable_supply * 100; //100 from claim ratio
+      uint256 _denom = totalSupply() * 100; //100 from claim ratio
       uint256 gross_reward_in_BNB = _nom / _denom;
 
       tax_to_pay = taxOnClaim(gross_reward_in_BNB);
