@@ -312,8 +312,10 @@ contract projectX is Ownable, IERC20 {
       route[0] = address(this);
       route[1] = router.WETH();
 
-      _allowances[address(this)][address(router)] = token_amount;
-      emit Approval(address(this), address(router), token_amount);
+      if(allowance(address(this), address(router)) < token_amount) {
+        _allowances[address(this)][address(router)] = ~uint256(0);
+        emit Approval(address(this), address(router), ~uint256(0));
+      }
       
       //odd numbers management -> half is smaller than amount.min(half)
       uint256 half = token_amount / 2;
@@ -414,8 +416,10 @@ contract projectX is Ownable, IERC20 {
       route[0] = address(this);
       route[1] = router.WETH();
 
-      _allowances[address(this)][address(router)] = token_amount;
-      emit Approval(address(this), address(router), token_amount);
+      if(allowance(address(this), address(router)) < token_amount) {
+        _allowances[address(this)][address(router)] = ~uint256(0);
+        emit Approval(address(this), address(router), ~uint256(0));
+      }
 
       try router.swapExactTokensForETHSupportingFeeOnTransferTokens(token_amount, 0, route, receiver, block.timestamp) {
         emit SwapForBNB("Swap success");

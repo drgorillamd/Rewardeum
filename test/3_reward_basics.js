@@ -8,8 +8,9 @@ const routerAddress = "0x10ED43C718714eb63d5aA57B78B54704E256024E";
 
 //const chai = require('chai');
 const BN = require('bn.js');
-
 require('chai').use(require('chai-bn')(BN)).should();
+
+let x;
 
 contract("Reward", accounts => {
 
@@ -19,13 +20,13 @@ contract("Reward", accounts => {
   //98 BNB and 98*10**10 iBNB -> 10**10 iBNB/BNB
 
   before(async function() {
-    const x = await Token.new(routerAddress);
+    await Token.new(routerAddress);
+    x = await Token.deployed();
   });
 
   describe("Setting the Scene", () => {
 
     it("Adding Liq", async () => { //from 2_liqAdd & Taxes
-      const x = await Token.deployed();
       await x.setCircuitBreaker(true, {from: accounts[0]});
       const status_circ_break = await x.circuit_breaker.call();
       const router = await routerContract.at(routerAddress);
@@ -44,14 +45,12 @@ contract("Reward", accounts => {
       assert.notEqual(LPBalance, 0, "No LP token received / check Uni pool");
     });
 
-    it("Lowering swap_for_reward_thresholdThreshold", async () => {
-      const x = await Token.deployed();
+    it("Lowering swap_for_reward_threshold Threshold", async () => {
       await x.setSwapFor_Reward_Threshold(1);
       const expected = new BN(1*10**9);
       const val = await x.swap_for_reward_threshold.call();
       val.should.be.a.bignumber.that.equals(expected);
     });
-
 
   });
 
@@ -59,7 +58,6 @@ contract("Reward", accounts => {
   describe("Balancer setting", () => {
 
     it("Transfer to contract > 2 * swap for reward threshold -100", async () => {
-      const x = await Token.deployed();
       await x.transfer(x.address, (2*10**9)-100, { from: accounts[0] });
       const newBal = await x.balanceOf.call(x.address);
       const expected = new BN((2*10**9)-100);
@@ -67,25 +65,13 @@ contract("Reward", accounts => {
     });
 
     it("Reset balancer", async () => {
-      const x = await Token.deployed();
-      await x.resetBalancer({from: accounts[0]});
-      const new_bal = await x.balancer_balances.call();
-      const subbal = new_bal[0];  //when reset, ratio at 50/50
-      const expected = new BN(((2*10**9)-100)/2);
-      subbal.should.be.a.bignumber.that.equals(expected);
+      await truffleAssert.passes(x.resetBalancer({from: accounts[0]}), "balancer reset failed");
     });
 
-    it("Reward pool status", async () => {
-      const x = await Token.deployed();
-      const a = await x.balancer_balances.call();
-      const reward_obs_pool = a[0];
-      assert.notEqual(reward_obs_pool, 0, "Reward pool failure");
-    });
   });
 
   describe("Reward Mechanics: Swap", () => {
     it("Transfers to trigger swap - wish me luck", async () => {
-      const x = await Token.deployed();
       await x.transfer(accounts[1], 10**9, { from: accounts[0] });
       await truffleCost.log(x.transfer(accounts[2], 10**9, { from: accounts[1] }));
       const newBal = await x.balanceOf.call(accounts[2]);
@@ -93,26 +79,30 @@ contract("Reward", accounts => {
     });
 
     it("BNB balance", async () => {
-      const x = await Token.deployed();
       const bal = await web3.eth.getBalance(x.address);
       assert.notEqual(bal, 0, "Swap Failure");
     });
   });
+/*
+  describe("Reward Mechanics: Smartpool", () => {
 
-  describe("Reward Mechanics: internal functions", () => {
-    it("getQuoteInBNB()", async () => {
-      const x = await Token.deployed();
-      const quote = await x.getQuoteInBNB('1'+'0'.repeat(18));
-      assert.notEqual(quote, 0, "Wrong quote");
+    smart_pool_balances().call()
+
+    it("Transfers to trigger swap - wish me luck", async () => {
+      //const x = await Token.deployed();
+      await x.transfer(accounts[1], 10**9, { from: accounts[0] });
+      await truffleCost.log(x.transfer(accounts[2], 10**9, { from: accounts[1] }));
+      const newBal = await x.balanceOf.call(accounts[2]);
+      assert.equals(0, 0, "Transfer Failure");
     });
 
-    it("taxOnClaim()", async () => {  // [2, 4, 6, 8, 15];
+    it("BNB balance", async () => {
       const x = await Token.deployed();
-      const tax = await x.taxOnClaim('7'+'0'.repeat(17)); //
-      const expected = '28'+'0'.repeat(15);
-      assert.equal(tax.toString(), expected, "Wrong tax");
+      const bal = await web3.eth.getBalance(x.address);
+      console.log(bal);
+      assert.notEqual(bal, 0, "Swap Failure");
     });
-
   });
+  */
 
 });

@@ -6,49 +6,48 @@ const pairContract = artifacts.require('IUniswapV2Pair');
 const routerAddress = "0x10ED43C718714eb63d5aA57B78B54704E256024E";
 const BN = require('bn.js');
 require('chai').use(require('chai-bn')(BN)).should();
+let x;
 
 contract("LP and taxes", accounts => {
 
-  const to_send = '1'+'0'.repeat(22); //1%
   const pool_balance = '1'+'0'.repeat(23); // 10%
 
   before(async function() {
-    const x = await Token.new(routerAddress);
+    await Token.new(routerAddress);
+    x = await Token.deployed();
   });
 
   describe("Adding Liq", () => {
     it("Circuit Breaker: Enabled", async () => {
-      const x = await Token.deployed();
       await x.setCircuitBreaker(true, {from: accounts[0]});
       const status_circ_break = await x.circuit_breaker.call();
       assert.equal(true, status_circ_break, "Circuit breaker not set");
     });
 
     it("Router testing", async () => {
-      const x = await Token.deployed();
       const router = await routerContract.at(routerAddress);
       assert.notEqual(0, await router.WETH.call(), "router down");
     });
 
     it("Adding liquidity: 10^8 token & 4BNB", async () => {
-      const amount_BNB = 4*10**18;
+      const amount_BNB = '4'+'0'.repeat(18);
       const amount_token = pool_balance;
       const sender = accounts[0];
 
-      const x = await Token.deployed();
       const router = await routerContract.at(routerAddress);
       let _ = await x.approve(routerAddress, amount_token);
-      await router.addLiquidityETH(x.address, amount_token, 0, 0, accounts[0], 1907352278, {value: amount_BNB}); //9y from now. Are you from the future? Did we make it?
+      await router.addLiquidityETH(x.address, amount_token, 0, 0, sender, 1907352278, {value: amount_BNB}); //9y from now. Are you from the future? Did we make it?
 
       const pairAdr = await x.pair.call();
       const pair = await pairContract.at(pairAdr);
-      const LPBalance = await pair.balanceOf.call(accounts[0]);
+      const token_bal = await x.balanceOf(pairAdr); //not bnb since it's wbnb and lazy to compile wbnb
+      const LPBalance = await pair.balanceOf.call(sender);
 
       LPBalance.should.be.a.bignumber.that.is.not.null;
+      token_bal.should.be.a.bignumber.that.equals(new BN(amount_token));
     });
 
     it("Circuit Breaker: Disabled", async () => {
-      const x = await Token.deployed();
       await x.setCircuitBreaker(false, {from: accounts[0]});
       const status_circ_break = await x.circuit_breaker.call();
       assert.equal(false, status_circ_break, "Circuit breaker not set");
@@ -60,9 +59,9 @@ contract("LP and taxes", accounts => {
   //[   0.0125,     250,     500,      750,     1000]	    	     Tranche(% of pool bal)
   describe("Regular transfers", () => {
 
-    it("Transfer standard: single -- 1m : 17% ?", async () => {
-      const x = await Token.deployed();
-      const to_receive = new BN(to_send - (to_send * 0.17)); // 17% taxes
+    it("Transfer standard: single -- 1m : 17% + triggers LP", async () => {
+      const to_send = '1'+'0'.repeat(21); //0.1%pool
+      const to_receive = '830000000000000000000'; // 17% taxes
       const sender = accounts[1];
       const receiver = accounts[2];
       await x.transfer(sender, to_send, { from: accounts[0] });
@@ -71,44 +70,29 @@ contract("LP and taxes", accounts => {
       newBal.should.be.a.bignumber.that.equals(to_receive);
     });
 
-    it.skip("Transfer standard: Reward pool status", async () => {
-      const x = await Token.deployed();
-      const totalSupply = await x.totalSupply.call();
-
-      const t = to_send * 99 / 1000 * (pool_balance / totalSupply);//9.9% of 1260000 * (pool_balance / circ_supply) +
-      const reward_theo_pool = t + (to_send * 2 / 100);
-      const a = await x.balancer_balances.call();
-      const reward_obs_pool = a[0];
-
-      assert.equal(reward_obs_pool.toNumber(), Math.floor(reward_theo_pool), "incorrect reward pool");
-    });
-
-    it.skip("Transfer standard: Liquidity pool status", async () => {
-      const x = await Token.deployed();
-      const totalSupply = await x.totalSupply.call();
-
-      const liq_theo_pool = to_send * 99 / 1000 * (1 -(pool_balance / totalSupply)); //9.9% of 1260000 * [1 - (pool_balance / circ_supply)]
-      const a = await x.balancer_balances.call();
-      const liq_obs_pool = a[1];
-
-      assert.equal(liq_obs_pool.toNumber(), Math.floor(liq_theo_pool), "incorrect liq pool");
-    });
-
   });
 
   describe("swap - tax on selling", () => {
-    it("Sell", async () => {
-      const x = await Token.deployed();
-      const router = await routerContract.at(routerAddress);
-      const to_receive = to_send - (to_send * 0.17) - (to_send * 2 / 100);
-      const seller = accounts[2];
-      const route = [x.address, await router.WETH()]
 
-      await x.transfer(seller, to_send, { from: accounts[0] }); //0 is excluded
-      let _ = await x.approve(routerAddress, to_send, {from: seller});
-      await router.swapExactTokensForETHSupportingFeeOnTransferTokens(to_send, 0, route, seller, 1907352278, {from: seller});
-      
-      assert.equal(0, 1, "check events");
+    it("Buy + Sell", async () => {
+      const router = await routerContract.at(routerAddress);
+      const seller = accounts[5];
+      const route_sell = [x.address, await router.WETH()]
+      const route_buy = [await router.WETH(), x.address]
+      const val_bnb = '1'+'0'.repeat(18);
+
+      const res = await router.swapExactETHForTokensSupportingFeeOnTransferTokens(0, route_buy, seller, 1907352278, {from: seller, value: val_bnb});
+      console.log(res);
+      //const init_bal = await web3.eth.getBalance(seller);
+      const init_token = await x.balanceOf.call(seller);
+
+      let _ = await x.approve(routerAddress, init_token+1, {from: seller});
+      const res2 = await router.swapExactTokensForETHSupportingFeeOnTransferTokens(init_token, 0, route_sell, seller, 1907352278, {from: seller});
+      console.log(res2);
+      const end_bal = await web3.eth.getBalance(seller);
+
+      end_bal.should.be.a.bignumber.lessThan(init_bal);
     });
+
   });
 });

@@ -6,27 +6,27 @@ require('chai').use(require('chai-bn')(BN)).should();
 
 const routerAddress = "0x10ED43C718714eb63d5aA57B78B54704E256024E";
 
+let x;
+
 contract("Basic tests", accounts => {
 
   before(async function() {
-    const x = await Token.new(routerAddress);
+    await Token.new(routerAddress);
+    x = await Token.deployed();
   });
 
   describe("Init state", () => {
     it("Initialized - return proper name()", async () => {
-      const x = await Token.deployed();
       const obs_name = await x.name();
       assert.equal(obs_name, "ProjectX", "incorrect name returned")
     });
 
     it("deployer = owner", async () => {
-      const x = await Token.deployed();
       const owned_by = await x.owner.call();
       assert.equal(accounts[0], owned_by, "Owner is not account[0]");
     });
 
     it("tot supply in owner", async () => {
-      const x = await Token.deployed();
       const bal = await x.balanceOf.call(accounts[0]);
       const theo = await x.totalSupply.call();
       bal.should.be.a.bignumber.that.equals(theo);
@@ -35,7 +35,6 @@ contract("Basic tests", accounts => {
 
   describe("Circuit breaker test", () => {
     it("Circuit Breaker: Enabled", async () => {
-      const x = await Token.deployed();
       await truffleCost.log(x.setCircuitBreaker(true, {from: accounts[0]}), 'USD');
       const status_circ_break = await x.circuit_breaker.call();
       assert.equal(true, status_circ_break, "Circuit breaker not set");
@@ -46,9 +45,8 @@ contract("Basic tests", accounts => {
       const to_receive = 10**6;
       const sender = accounts[0];
       const receiver = accounts[1];
-      const meta = await Token.deployed();
-      await truffleCost.log(meta.transfer(receiver, to_send, { from: sender }), 'USD');
-      const newBal = await meta.balanceOf.call(receiver);
+      await truffleCost.log(x.transfer(receiver, to_send, { from: sender }), 'USD');
+      const newBal = await x.balanceOf.call(receiver);
       assert.equal(newBal.toNumber(), to_receive, "incorrect amount transfered");
     });
 
@@ -57,21 +55,18 @@ contract("Basic tests", accounts => {
       const to_receive = 10**6;
       const sender = accounts[1];
       const receiver = accounts[2];
-      const x = await Token.deployed();
       await truffleCost.log(x.transfer(receiver, to_send, { from: sender }), 'USD');
       const newBal = await x.balanceOf.call(receiver);
       assert.equal(newBal.toNumber(), to_receive, "incorrect amount transfered");
     });
 
     it("Circuit Breaker: Disabled", async () => {
-      const x = await Token.deployed();
       await x.setCircuitBreaker(false, {from: accounts[0]});
       const status_circ_break = await x.circuit_breaker.call();
       assert.equal(false, status_circ_break, "Circuit breaker not set");
     });
 
     it("Circuit Breaker: Unauthorized", async () => {
-      const x = await Token.deployed();
       await truffleAssert.reverts(x.setCircuitBreaker(true, {from: accounts[1]}), "Ownable: caller is not the owner.");
     });
   });
