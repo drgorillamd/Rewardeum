@@ -82,7 +82,7 @@ contract projectX is Ownable, IERC20 {
 
     prop_balances private balancer_balances;
     SP public smart_pool_balances;
-    taxesRates public taxes = taxesRates({dev: 1, market: 1, balancer: 10, reserve: 5});
+    taxesRates public taxes = taxesRates({dev: 1, market: 1, balancer: 5, reserve: 8});
 
     event TaxRatesChanged();
     event SwapForBNB(string status);
