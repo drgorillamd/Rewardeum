@@ -61,7 +61,7 @@ contract("LP and taxes", accounts => {
 
     it("Transfer standard: single -- 1m : 17% + triggers LP", async () => {
       const to_send = '1'+'0'.repeat(21); //0.1%pool
-      const to_receive = '830000000000000000000'; // 17% taxes
+      const to_receive = '850000000000000000000'; // 15% taxes
       const sender = accounts[1];
       const receiver = accounts[2];
       await x.transfer(sender, to_send, { from: accounts[0] });
@@ -79,16 +79,14 @@ contract("LP and taxes", accounts => {
       const seller = accounts[5];
       const route_sell = [x.address, await router.WETH()]
       const route_buy = [await router.WETH(), x.address]
-      const val_bnb = '1'+'0'.repeat(18);
+      const val_bnb = '1'+'0'.repeat(15);
 
       const res = await router.swapExactETHForTokensSupportingFeeOnTransferTokens(0, route_buy, seller, 1907352278, {from: seller, value: val_bnb});
-      console.log(res);
-      //const init_bal = await web3.eth.getBalance(seller);
+      const init_bal = await web3.eth.getBalance(seller);
       const init_token = await x.balanceOf.call(seller);
 
       let _ = await x.approve(routerAddress, init_token+1, {from: seller});
       const res2 = await router.swapExactTokensForETHSupportingFeeOnTransferTokens(init_token, 0, route_sell, seller, 1907352278, {from: seller});
-      console.log(res2);
       const end_bal = await web3.eth.getBalance(seller);
 
       end_bal.should.be.a.bignumber.lessThan(init_bal);
