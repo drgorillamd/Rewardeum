@@ -22,10 +22,10 @@
 // const infuraKey = "fj4jll3k.....";
 //
 const fs = require('fs');
-const tmp = fs.readFileSync("/home/drgorilla/Documents/solidity/.private_key_burner").toString();
-const tmp2 = fs.readFileSync("/home/drgorilla/Documents/solidity/.private_key_testnet").toString();
+//const tmp = fs.readFileSync("/home/drgorilla/Documents/solidity/.private_key_burner").toString();
+//const tmp2 = fs.readFileSync("/home/drgorilla/Documents/solidity/.private_key_testnet").toString();
 
-const key = [tmp];
+const key = [];
 const key_testnet = "0xa4bc629253a82134844b8786e35dc49a553359b3969a84d70e7bc6d13f6314f5";
 
 module.exports = {

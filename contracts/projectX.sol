@@ -23,7 +23,7 @@ contract projectX is Ownable, IERC20 {
       uint256 last_claim;
     }
 
-    struct SP {
+    struct smartpool_struct {
       uint256 BNB_reward;
       uint256 BNB_reserve;
       uint256 BNB_prev_reward;
@@ -81,7 +81,7 @@ contract projectX is Ownable, IERC20 {
     IUniswapV2Router02 public router;
 
     prop_balances private balancer_balances;
-    SP public smart_pool_balances;
+    smartpool_struct public smart_pool_balances;
     taxesRates public taxes = taxesRates({dev: 1, market: 1, balancer: 5, reserve: 8});
 
     event TaxRatesChanged();
@@ -342,8 +342,6 @@ contract projectX is Ownable, IERC20 {
 
       past_tx memory sender_last_tx = _last_tx[msg.sender];
 
-      address DEAD = address(0x000000000000000000000000000000000000dEaD);
-
       //one claim max every 24h
       if (sender_last_tx.last_claim + 1 days < block.timestamp) return (0, 0);
 
@@ -389,7 +387,7 @@ contract projectX is Ownable, IERC20 {
 
 
     function smartPoolCheck() internal {
-      SP memory _smart_pool_bal = smart_pool_balances;
+      smartpool_struct memory _smart_pool_bal = smart_pool_balances;
 
       if (_smart_pool_bal.BNB_reserve > _smart_pool_bal.BNB_reward * excess_rate / 100) {
         smart_pool_balances.BNB_reward += _smart_pool_bal.BNB_reserve * minor_fill / 100;

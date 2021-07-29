@@ -83,26 +83,23 @@ contract("Reward", accounts => {
       assert.notEqual(bal, 0, "Swap Failure");
     });
   });
-/*
+
   describe("Reward Mechanics: Smartpool", () => {
 
-    smart_pool_balances().call()
-
-    it("Transfers to trigger swap - wish me luck", async () => {
-      //const x = await Token.deployed();
-      await x.transfer(accounts[1], 10**9, { from: accounts[0] });
-      await truffleCost.log(x.transfer(accounts[2], 10**9, { from: accounts[1] }));
-      const newBal = await x.balanceOf.call(accounts[2]);
-      assert.equals(0, 0, "Transfer Failure");
+    it("Smart pool balances", async () => {
+      const SPBal = await x.smart_pool_balances.call();
+      const BNB_bal = await web3.eth.getBalance(x.address); 
+      assert.equal(SPBal[0], BNB_bal, "SP: non valid balances");
     });
 
-    it("BNB balance", async () => {
-      const x = await Token.deployed();
-      const bal = await web3.eth.getBalance(x.address);
-      console.log(bal);
-      assert.notEqual(bal, 0, "Swap Failure");
+    it("smartpoolOverride", async () => {
+      const _BNB_bal = new BN(await web3.eth.getBalance(x.address));
+      const BNB_bal = _BNB_bal.divn(3);
+      await x.smartpoolOverride(BNB_bal, {from: accounts[0]}); //33% reward - 66% reserve
+      const SPBal = await x.smart_pool_balances.call();
+      SPBal[0].should.be.a.bignumber.that.equals(BNB_bal);
     });
+
   });
-  */
 
 });
