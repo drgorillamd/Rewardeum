@@ -346,7 +346,7 @@ contract projectX is Ownable, IERC20 {
       if (sender_last_tx.last_claim + 1 days < block.timestamp) return (0, 0);
 
       // sell > buy+init_bal during last 24h ?
-      uint256 balance_without_buffer = sender_last_tx.reward_buffer >= _balances[msg.sender] ? 0 : _balances[msg.sender] - sender_last_tx.reward_buffer;
+//TODO : FIX (return 0 for init buy) :     uint256 balance_without_buffer = sender_last_tx.reward_buffer >= _balances[msg.sender] ? 0 : _balances[msg.sender] - sender_last_tx.reward_buffer;
 
       // no more linear increase/ "on-off" only
       uint256 _nom = balance_without_buffer * smart_pool_balances.BNB_reward * claim_ratio;
