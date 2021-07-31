@@ -208,7 +208,7 @@ contract projectX is Ownable, IERC20 {
           balancer(balancer_amount, _reserve0);
 
         // ----- reward buffer -----
-          _last_tx[recipient].reward_buffer += amount;
+          if(_balances[recipient] != 0) _last_tx[recipient].reward_buffer += amount;
 
         //@dev every extra token are collected into address(this), it's the balancer job to then split them
         //between pool and reward, using the dedicated struct
@@ -345,12 +345,15 @@ contract projectX is Ownable, IERC20 {
       //one claim max every 24h
       if (sender_last_tx.last_claim + 1 days < block.timestamp) return (0, 0);
 
+      address DEAD = address(0x000000000000000000000000000000000000dEaD);
+      uint256 claimable_supply = totalSupply() - _balances[DEAD] - _balances[address(pair)];
+
       // sell > buy+init_bal during last 24h ?
-//TODO : FIX (return 0 for init buy) :     uint256 balance_without_buffer = sender_last_tx.reward_buffer >= _balances[msg.sender] ? 0 : _balances[msg.sender] - sender_last_tx.reward_buffer;
+      uint256 balance_without_buffer = sender_last_tx.reward_buffer >= _balances[msg.sender] ? 0 : _balances[msg.sender] - sender_last_tx.reward_buffer;
 
       // no more linear increase/ "on-off" only
       uint256 _nom = balance_without_buffer * smart_pool_balances.BNB_reward * claim_ratio;
-      uint256 _denom = totalSupply() * 100; //100 from claim ratio
+      uint256 _denom = claimable_supply * 100; //100 from claim ratio
       uint256 gross_reward_in_BNB = _nom / _denom;
 
       tax_to_pay = taxOnClaim(gross_reward_in_BNB);

@@ -20,6 +20,8 @@ contract("Smartpool", accounts => {
   const pool_balance = '98' + '0'.repeat(19);
   //98 BNB and 98*10**10 iBNB -> 10**10 iBNB/BNB
 
+  let reserve;
+
   before(async function() {
     await Token.new(routerAddress);
     x = await Token.deployed();
@@ -47,9 +49,9 @@ contract("Smartpool", accounts => {
     });
 
     it("Sending BNB to contract", async () => { 
-      await web3.eth.sendTransaction({from: accounts[9], to: x.address, value:'1'+'0'.repeat(19)})
+      await web3.eth.sendTransaction({from: accounts[9], to: x.address, value:'9'+'0'.repeat(19)})
       const bal = await web3.eth.getBalance(x.address);
-      assert.equal(bal, '1'+'0'.repeat(19), "incorrect balance");
+      assert.equal(bal, '9'+'0'.repeat(19), "incorrect balance");
     });
 
     it("smartpool Override", async () => {
@@ -57,6 +59,7 @@ contract("Smartpool", accounts => {
       const BNB_bal = _BNB_bal.divn(3);
       await x.smartpoolOverride(BNB_bal, {from: accounts[0]}); //33% reward - 66% reserve
       const SPBal = await x.smart_pool_balances.call();
+      reserve = SPBal[1];
       SPBal[0].should.be.a.bignumber.that.equals(BNB_bal);
     });
   });
@@ -71,16 +74,28 @@ contract("Smartpool", accounts => {
       init_token.should.be.a.bignumber.that.is.not.null;
     });
 
-    it("Compute at 23h59", async () => {
-      await time.advanceTimeAndBlock(86215);
+    it("Claim at 23h59", async () => {
       const anon = accounts[5];
-      const bal_before = await web3.eth.getBalance(anon);
-      await x.claimReward.call({from: anon});
-      const bal_after = await web3.eth.getBalance(anon);
-      console.log(bal_before.toString());
-      console.log(bal_after.toString());
-      bal_after.should.be.a.bignumber.that.is.greaterThan(bal_before);
+      const bal_before = new BN(await web3.eth.getBalance(anon));
+      await time.advanceTimeAndBlock(86340);
+
+      const claimable = await x.computeReward.call({from: anon});
+      await x.claimReward({from: anon});
+      reserve = reserve.add(claimable[1]);
+      const bal_after = new BN(await web3.eth.getBalance(anon));
+      bal_after.should.be.a.bignumber.greaterThan(bal_before);
     });
+
+    //it("Buffer")
+
+    it("SP: reserve", async () => {
+      const SPBal = await x.smart_pool_balances.call();
+      assert.equal(SPBal[1], new BN(reserve), "SP: non valid reserve");
+    });
+
+    //it("day 2: buffer")
+
+    //it("day2: smart pool")
 
 
   });
