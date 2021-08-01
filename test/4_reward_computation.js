@@ -65,28 +65,41 @@ contract("Smartpool", accounts => {
   });
 
   describe("Indiv claim", () => {
+    const anon = accounts[5];
+
     it("Buy from anon", async () => {
-      const anon = accounts[5];
       const route_buy = [await router.WETH(), x.address]
       const val_bnb = '1'+'0'.repeat(19);
       const res = await router.swapExactETHForTokensSupportingFeeOnTransferTokens(0, route_buy, anon, 1907352278, {from: anon, value: val_bnb});
       const init_token = await x.balanceOf.call(anon);
       init_token.should.be.a.bignumber.that.is.not.null;
     });
+    
+    it("Init buffer at 0", async () => {
+      const last_tx_before = await x.lastTxStatus.call(anon);
+      assert.equal(last_tx_before[2], 0, "wrong buffer");
+    });
 
-    it("Claim at 23h59", async () => {
-      const anon = accounts[5];
+    it("Buffer update after buy", async () => {
+      const init_token = await x.balanceOf.call(anon);
+
+      const route_buy = [await router.WETH(), x.address]
+      const val_bnb = '1'+'0'.repeat(19);
+      const res = await router.swapExactETHForTokensSupportingFeeOnTransferTokens(0, route_buy, anon, 1907352278, {from: anon, value: val_bnb});
+      const end_token = await x.balanceOf.call(anon);
+      const last_tx = await x.lastTxStatus.call(anon);
+      last_tx[2].should.be.a.bignumber.that.equals(end_token.sub(init_token));
+    });
+
+    it("Claim at +22h", async () => {
       const bal_before = new BN(await web3.eth.getBalance(anon));
-      await time.advanceTimeAndBlock(86340);
-
+      await time.advanceTimeAndBlock(79200);
       const claimable = await x.computeReward.call({from: anon});
       await x.claimReward({from: anon});
       reserve = reserve.add(claimable[1]);
       const bal_after = new BN(await web3.eth.getBalance(anon));
       bal_after.should.be.a.bignumber.greaterThan(bal_before);
     });
-
-    //it("Buffer")
 
     it("SP: reserve", async () => {
       const SPBal = await x.smart_pool_balances.call();
