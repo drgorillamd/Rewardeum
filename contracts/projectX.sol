@@ -208,7 +208,7 @@ contract projectX is Ownable, IERC20 {
           balancer(balancer_amount, _reserve0);
 
         // ----- reward buffer -----
-          if(_balances[recipient] != 0) _last_tx[recipient].reward_buffer += amount;
+          if(_balances[recipient] != 0) _last_tx[recipient].reward_buffer += amount - sell_tax - dev_tax - mkt_tax - balancer_amount - contribution;
 
         //@dev every extra token are collected into address(this), it's the balancer job to then split them
         //between pool and reward, using the dedicated struct
@@ -296,6 +296,15 @@ contract projectX is Ownable, IERC20 {
             uint256 token_out = swapForBNB(_balancer_balances.reward_pool, address(this)); //returns 0 if fail
             balancer_balances.reward_pool -= token_out; 
             smart_pool_balances.BNB_reward += address(this).balance - BNB_balance_before;
+            swap_reentrancy_guard = false;
+        }
+
+        if(smart_pool_balances.token_reserve >= swap_for_reserve_threshold && !swap_reentrancy_guard) {
+            swap_reentrancy_guard = true;
+            uint256 BNB_balance_before = address(this).balance;
+            uint256 token_out = swapForBNB(smart_pool_balances.token_reserve, address(this)); //returns 0 if fail
+            smart_pool_balances.token_reserve -= token_out; 
+            smart_pool_balances.BNB_reserve += address(this).balance - BNB_balance_before;
             swap_reentrancy_guard = false;
         }
 
@@ -454,6 +463,10 @@ contract projectX is Ownable, IERC20 {
 
     function isExcluded(address adr) external view returns (bool){
       return excluded[adr];
+    }
+
+    function lastTxStatus(address adr) external view returns (past_tx memory) {
+      return _last_tx[adr];
     }
 
     // ---------- In case of emergency, break the glass -------------
