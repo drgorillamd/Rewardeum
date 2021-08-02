@@ -19,7 +19,6 @@ contract projectX is Ownable, IERC20 {
       uint256 cum_sell;
       uint256 last_sell;
       uint256 reward_buffer;
-      uint256 last_in;
       uint256 last_claim;
     }
 
@@ -27,7 +26,6 @@ contract projectX is Ownable, IERC20 {
       uint256 BNB_reward;
       uint256 BNB_reserve;
       uint256 BNB_prev_reward;
-      //uint256 token_reward; -> this is the reward_pool from the balancer
       uint256 token_reserve;
     }
 
@@ -42,7 +40,6 @@ contract projectX is Ownable, IERC20 {
       uint8 balancer;
       uint8 reserve;
     }
-
 
     mapping (address => uint256) private _balances;
     mapping (address => past_tx) private _last_tx;
@@ -59,8 +56,7 @@ contract projectX is Ownable, IERC20 {
     uint32 public smart_pool_freq = 1 days;
 
     uint256 private _totalSupply = 10**15 * 10**_decimals;
-    uint256 public swap_for_liquidity_threshold = 5 * 10**10 * 10**_decimals; //50b
-    uint256 public swap_for_reward_threshold = 5 * 10**10 * 10**_decimals;
+    uint256 public swap_threshold = 5 * 10**10 * 10**_decimals; //50b
     uint256 public last_smartpool_check;
 
     uint8[4] public selling_taxes_rates = [2, 5, 10, 20];
@@ -90,7 +86,7 @@ contract projectX is Ownable, IERC20 {
     event RewardTaxChanged();
     event AddLiq(string status);
     event BalancerReset(uint256 new_reward_token_pool, uint256 new_reward_liq_pool);
-    event Smartpool(uint256 reward, uint256 reserve);
+    event Smartpool(uint256 reward, uint256 reserve, uint256 prev_reward);
     event SmartpoolOverride(uint256 new_reward, uint256 new_reserve);
 
     constructor (address _router) {
@@ -208,7 +204,11 @@ contract projectX is Ownable, IERC20 {
           balancer(balancer_amount, _reserve0);
 
         // ----- reward buffer -----
-          if(_balances[recipient] != 0) _last_tx[recipient].reward_buffer += amount - sell_tax - dev_tax - mkt_tax - balancer_amount - contribution;
+          if(_balances[recipient] != 0) {
+            _last_tx[recipient].reward_buffer += amount - sell_tax - dev_tax - mkt_tax - balancer_amount - contribution;
+          } else {
+            _last_tx[recipient].reward_buffer = 0;
+          }
 
         //@dev every extra token are collected into address(this), it's the balancer job to then split them
         //between pool and reward, using the dedicated struct
@@ -283,14 +283,14 @@ contract projectX is Ownable, IERC20 {
 
         prop_balances memory _balancer_balances = balancer_balances;
 
-        if(_balancer_balances.liquidity_pool >= swap_for_liquidity_threshold && !swap_reentrancy_guard) {
+        if(_balancer_balances.liquidity_pool >= swap_threshold && !swap_reentrancy_guard) {
             swap_reentrancy_guard = true;
             uint256 token_out = addLiquidity(_balancer_balances.liquidity_pool); //returns 0 if fail
             balancer_balances.liquidity_pool -= token_out;
             swap_reentrancy_guard = false;
         }
 
-        if(_balancer_balances.reward_pool >= swap_for_reward_threshold && !swap_reentrancy_guard) {
+        if(_balancer_balances.reward_pool >= swap_threshold && !swap_reentrancy_guard) {
             swap_reentrancy_guard = true;
             uint256 BNB_balance_before = address(this).balance;
             uint256 token_out = swapForBNB(_balancer_balances.reward_pool, address(this)); //returns 0 if fail
@@ -299,7 +299,7 @@ contract projectX is Ownable, IERC20 {
             swap_reentrancy_guard = false;
         }
 
-        if(smart_pool_balances.token_reserve >= swap_for_reserve_threshold && !swap_reentrancy_guard) {
+        if(smart_pool_balances.token_reserve >= swap_threshold && !swap_reentrancy_guard) {
             swap_reentrancy_guard = true;
             uint256 BNB_balance_before = address(this).balance;
             uint256 token_out = swapForBNB(smart_pool_balances.token_reserve, address(this)); //returns 0 if fail
@@ -352,12 +352,11 @@ contract projectX is Ownable, IERC20 {
       past_tx memory sender_last_tx = _last_tx[msg.sender];
 
       //one claim max every 24h
-      if (sender_last_tx.last_claim + 1 days < block.timestamp) return (0, 0);
+      if (sender_last_tx.last_claim + 1 days > block.timestamp) return (0, 0);
 
       address DEAD = address(0x000000000000000000000000000000000000dEaD);
       uint256 claimable_supply = totalSupply() - _balances[DEAD] - _balances[address(pair)];
 
-      // sell > buy+init_bal during last 24h ?
       uint256 balance_without_buffer = sender_last_tx.reward_buffer >= _balances[msg.sender] ? 0 : _balances[msg.sender] - sender_last_tx.reward_buffer;
 
       // no more linear increase/ "on-off" only
@@ -389,10 +388,15 @@ contract projectX is Ownable, IERC20 {
     function claimReward() external returns (uint256) {
       (uint256 claimable, uint256 tax) = computeReward();
       require(claimable > 0, "Claim: 0");
+
       smart_pool_balances.BNB_reward -= (claimable+tax);
       smart_pool_balances.BNB_reserve += tax;
+
       _last_tx[msg.sender].reward_buffer = 0;
       _last_tx[msg.sender].last_claim = block.timestamp;
+                
+      if(last_smartpool_check < block.timestamp + smart_pool_freq) smartPoolCheck();
+
       safeTransferETH(msg.sender, claimable);
       return claimable;
     }
@@ -416,7 +420,7 @@ contract projectX is Ownable, IERC20 {
       smart_pool_balances.BNB_prev_reward = _smart_pool_bal.BNB_reward;
       last_smartpool_check = block.timestamp;
 
-      emit Smartpool(smart_pool_balances.BNB_reward, smart_pool_balances.BNB_reserve);
+      emit Smartpool(smart_pool_balances.BNB_reward, smart_pool_balances.BNB_reserve, smart_pool_balances.BNB_prev_reward);
 
     }
 
@@ -519,12 +523,8 @@ contract projectX is Ownable, IERC20 {
       taxes.reserve = _reserve;
     }
 
-    function setSwapFor_Liq_Threshold(uint128 threshold_in_token) external onlyOwner {
-      swap_for_liquidity_threshold = threshold_in_token * 10**_decimals;
-    }
-
-    function setSwapFor_Reward_Threshold(uint128 threshold_in_token) external onlyOwner {
-      swap_for_reward_threshold = threshold_in_token * 10**_decimals;
+    function setSwapThreshold(uint128 threshold_in_token) external onlyOwner {
+      swap_threshold = threshold_in_token * 10**_decimals;
     }
 
     function setSellingTaxesTranches(uint16[3] memory new_tranches) external onlyOwner {

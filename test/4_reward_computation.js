@@ -66,6 +66,7 @@ contract("Smartpool", accounts => {
 
   describe("Indiv claim", () => {
     const anon = accounts[5];
+    let amount_claimed;
 
     it("Buy from anon", async () => {
       const route_buy = [await router.WETH(), x.address]
@@ -91,25 +92,62 @@ contract("Smartpool", accounts => {
       last_tx[2].should.be.a.bignumber.that.equals(end_token.sub(init_token));
     });
 
-    it("Claim at +22h", async () => {
+    it("SP: reserve", async () => {
+      const SPBal = await x.smart_pool_balances.call();
+      console.log("reward BNB : "+SPBal[0].toString());
+      console.log("reserve BNB : "+SPBal[1].toString());
+      console.log("prev reward BNB : "+SPBal[2].toString());
+      console.log("reserve token : "+SPBal[3].toString());
+    });
+
+    it("Claim at +24h", async () => {
       const bal_before = new BN(await web3.eth.getBalance(anon));
-      await time.advanceTimeAndBlock(79200);
+      await time.advanceTimeAndBlock(86401);
       const claimable = await x.computeReward.call({from: anon});
       await x.claimReward({from: anon});
       reserve = reserve.add(claimable[1]);
       const bal_after = new BN(await web3.eth.getBalance(anon));
+      amount_claimed = bal_after.sub(bal_before);
       bal_after.should.be.a.bignumber.greaterThan(bal_before);
     });
 
     it("SP: reserve", async () => {
       const SPBal = await x.smart_pool_balances.call();
-      assert.equal(SPBal[1], new BN(reserve), "SP: non valid reserve");
+      console.log("reward BNB : "+SPBal[0].toString());
+      console.log("reserve BNB : "+SPBal[1].toString());
+      console.log("prev reward BNB : "+SPBal[2].toString());
+      console.log("reserve token : "+SPBal[3].toString());
     });
 
-    //it("day 2: buffer")
+    it("Buffer after claim", async () => {
+      const last_tx_before = await x.lastTxStatus.call(anon);
+      assert.equal(last_tx_before[2], 0, "wrong buffer");
+      console.log("cum sell "+last_tx_before[0]);
+      console.log("last_sell "+last_tx_before[1]);
+      console.log("reward_buffer "+last_tx_before[2]);
+      console.log("last_claim "+last_tx_before[3]);
+      console.log("balance token "+await x.balanceOf.call(anon));
 
-    //it("day2: smart pool")
+    });
 
+    it("Claim at +22+24h", async () => {
+      await time.advanceTimeAndBlock(86410);
+      const bal_before = new BN(await web3.eth.getBalance(anon));
+      const claimable = await x.computeReward.call({from: anon});
+      await x.claimReward({from: anon});
+      const bal_after = new BN(await web3.eth.getBalance(anon));
+      bal_after.should.be.a.bignumber.greaterThan(bal_before);
+      const new_amount_claimed = bal_after.sub(bal_before);
+      new_amount_claimed.should.be.a .bignumber.greaterThan(amount_claimed);
+    });
+
+    it("SP: reserve", async () => {
+      const SPBal = await x.smart_pool_balances.call();
+      console.log("reward BNB : "+SPBal[0].toString());
+      console.log("reserve BNB : "+SPBal[1].toString());
+      console.log("prev reward BNB : "+SPBal[2].toString());
+      console.log("reserve token : "+SPBal[3].toString());
+    });
 
   });
 
