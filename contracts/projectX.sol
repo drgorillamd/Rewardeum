@@ -56,7 +56,9 @@ contract projectX is Ownable, IERC20 {
     uint32 public smart_pool_freq = 1 days;
 
     uint256 private _totalSupply = 10**15 * 10**_decimals;
-    uint256 public swap_threshold = 5 * 10**10 * 10**_decimals; //50b
+    uint256 public swap_for_liquidity_threshold = 10**13 * 10**_decimals; //1%
+    uint256 public swap_for_reward_threshold = 10**13 * 10**_decimals;
+    uint256 public swap_for_reserve_threshold = 10**13 * 10**_decimals;
     uint256 public last_smartpool_check;
 
     uint8[4] public selling_taxes_rates = [2, 5, 10, 20];
@@ -64,7 +66,9 @@ contract projectX is Ownable, IERC20 {
     uint16[3] public selling_taxes_tranches = [200, 500, 1000]; // % and div by 10000 0.012% -0.025% -(...)
 
     bool public circuit_breaker;
-    bool private swap_reentrancy_guard;
+    bool private liq_swap_reentrancy_guard;
+    bool private reward_swap_reentrancy_guard;
+    bool private reserve_swap_reentrancy_guard;
 
     string private _name = "ProjectX";
     string private _symbol = "X";
@@ -283,29 +287,29 @@ contract projectX is Ownable, IERC20 {
 
         prop_balances memory _balancer_balances = balancer_balances;
 
-        if(_balancer_balances.liquidity_pool >= swap_threshold && !swap_reentrancy_guard) {
-            swap_reentrancy_guard = true;
+        if(_balancer_balances.liquidity_pool >= swap_for_liquidity_threshold && !liq_swap_reentrancy_guard) {
+            liq_swap_reentrancy_guard = true;
             uint256 token_out = addLiquidity(_balancer_balances.liquidity_pool); //returns 0 if fail
             balancer_balances.liquidity_pool -= token_out;
-            swap_reentrancy_guard = false;
+            liq_swap_reentrancy_guard = false;
         }
 
-        if(_balancer_balances.reward_pool >= swap_threshold && !swap_reentrancy_guard) {
-            swap_reentrancy_guard = true;
+        if(_balancer_balances.reward_pool >= swap_for_reward_threshold && !reward_swap_reentrancy_guard) {
+            reward_swap_reentrancy_guard = true;
             uint256 BNB_balance_before = address(this).balance;
             uint256 token_out = swapForBNB(_balancer_balances.reward_pool, address(this)); //returns 0 if fail
             balancer_balances.reward_pool -= token_out; 
             smart_pool_balances.BNB_reward += address(this).balance - BNB_balance_before;
-            swap_reentrancy_guard = false;
+            reward_swap_reentrancy_guard = false;
         }
 
-        if(smart_pool_balances.token_reserve >= swap_threshold && !swap_reentrancy_guard) {
-            swap_reentrancy_guard = true;
+        if(smart_pool_balances.token_reserve >= swap_for_reserve_threshold && !reserve_swap_reentrancy_guard) {
+            reserve_swap_reentrancy_guard = true;
             uint256 BNB_balance_before = address(this).balance;
             uint256 token_out = swapForBNB(smart_pool_balances.token_reserve, address(this)); //returns 0 if fail
             smart_pool_balances.token_reserve -= token_out; 
             smart_pool_balances.BNB_reserve += address(this).balance - BNB_balance_before;
-            swap_reentrancy_guard = false;
+            reserve_swap_reentrancy_guard = false;
         }
 
         emit BalancerPools(_balancer_balances.liquidity_pool, _balancer_balances.reward_pool);
@@ -523,8 +527,16 @@ contract projectX is Ownable, IERC20 {
       taxes.reserve = _reserve;
     }
 
-    function setSwapThreshold(uint128 threshold_in_token) external onlyOwner {
-      swap_threshold = threshold_in_token * 10**_decimals;
+    function setSwapFor_Liq_Threshold(uint128 threshold_in_token) external onlyOwner {
+      swap_for_liquidity_threshold = threshold_in_token * 10**_decimals;
+    }
+
+    function setSwapFor_Reward_Threshold(uint128 threshold_in_token) external onlyOwner {
+      swap_for_reward_threshold = threshold_in_token * 10**_decimals;
+    }
+
+    function setSwapFor_Reserve_Threshold(uint128 threshold_in_token) external onlyOwner {
+      swap_for_reserve_threshold = threshold_in_token * 10**_decimals;
     }
 
     function setSellingTaxesTranches(uint16[3] memory new_tranches) external onlyOwner {
