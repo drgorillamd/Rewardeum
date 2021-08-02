@@ -267,7 +267,7 @@ contract projectX is Ownable, IERC20 {
     }
 
 
-    //@dev take the 9.9% taxes as input, split it between reward and liq subpools
+    //@dev take the 15% taxes as input, split it between reward and liq subpools
     //    according to pool condition -> circ-pool/circ supply closer to one implies
     //    priority to the reward pool
     function balancer(uint256 amount, uint256 pool_balance) internal {
@@ -361,7 +361,7 @@ contract projectX is Ownable, IERC20 {
 
       // no more linear increase/ "on-off" only
       uint256 _nom = balance_without_buffer * smart_pool_balances.BNB_reward * claim_ratio;
-      uint256 _denom = claimable_supply * 100; //100 from claim ratio
+      uint256 _denom = totalSupply() * 100; //100 from claim ratio
       uint256 gross_reward_in_BNB = _nom / _denom;
 
       tax_to_pay = taxOnClaim(gross_reward_in_BNB);
@@ -370,12 +370,11 @@ contract projectX is Ownable, IERC20 {
 
     //@dev Compute the tax on claimed reward - labelled in BNB
     function taxOnClaim(uint256 amount) internal view returns(uint256 tax){
-
-      if(amount > 2 ether) { return amount * claiming_taxes_rates[4] / 100; }
-      else if(amount > 1.50 ether) { return amount * claiming_taxes_rates[3] / 100; }
-      else if(amount > 1 ether) { return amount * claiming_taxes_rates[2] / 100; }
-      else if(amount > 0.5 ether) { return amount * claiming_taxes_rates[1] / 100; }
-      else { return amount * claiming_taxes_rates[0] / 100; }
+    
+      uint256 tax_graph = 2*amount**2 + 3*amount;
+      
+      if(amount < 0.01 ether) { return 0; }
+      else { return amount * tax_graph / 100; }
 
     }
 
