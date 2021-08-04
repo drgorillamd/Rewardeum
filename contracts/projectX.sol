@@ -187,11 +187,11 @@ contract projectX is Ownable, IERC20 {
         // ----  Smart pool funding & reward cycle (re)init ----
           contribution = amount* taxes.reserve / 100;
           smart_pool_balances.reserve += contribution;
-          if(last_smartpool_check < block.timestamp + smart_pool_freq) smartPoolCheck();
+          if(last_smartpool_check + smart_pool_freq < block.timestamp) smartPoolCheck();
           if(_balances[recipient] == 0) _last_tx[recipient].last_claim = block.timestamp;
           
         // ------ "flexible"/dev&marketing taxes -------
-          dev_tax = amount  * taxes.dev / 100;
+          dev_tax = amount * taxes.dev / 100;
           mkt_tax = amount * taxes.market / 100;
 
         // ------ balancer tax  ------
@@ -233,25 +233,16 @@ contract projectX is Ownable, IERC20 {
     //the thresholds defined in selling_taxes_thresholds on 24h floating window
     function sellingTax(address sender, uint256 amount, uint256 pool_balance) internal returns(uint256 sell_tax) {
 
-      if(block.timestamp > _last_tx[sender].last_sell + 1 days) {
-        _last_tx[sender].cum_sell = 0; // a.k.a The Virgin
+      if(block.timestamp > _last_tx[sender].last_sell + 1 days) _last_tx[sender].cum_sell = 0; // a.k.a The Virgin
 
-      } else {
-        uint16[3] memory _tax_tranches = selling_taxes_tranches;
+      uint16[3] memory _tax_tranches = selling_taxes_tranches;
 
-        uint256 new_cum_sum = amount+ _last_tx[sender].cum_sell;
+      uint256 new_cum_sum = amount+ _last_tx[sender].cum_sell;
 
-        if(new_cum_sum > pool_balance * _tax_tranches[2] / 10**4) {
-          sell_tax = amount * selling_taxes_rates[3] / 100;
-        }
-        else if(new_cum_sum > pool_balance * _tax_tranches[1] / 10**4) {
-          sell_tax = amount * selling_taxes_rates[2] / 100;
-        }
-        else if(new_cum_sum > pool_balance * _tax_tranches[0] / 10**4) {
-          sell_tax = amount * selling_taxes_rates[1] / 100;
-        }
-        else { sell_tax = amount * selling_taxes_rates[0] / 100; }
-      }
+      if(new_cum_sum > pool_balance * _tax_tranches[2] / 10**4) sell_tax = amount * selling_taxes_rates[3] / 100;
+      else if(new_cum_sum > pool_balance * _tax_tranches[1] / 10**4) sell_tax = amount * selling_taxes_rates[2] / 100;
+      else if(new_cum_sum > pool_balance * _tax_tranches[0] / 10**4) sell_tax = amount * selling_taxes_rates[1] / 100;
+      else sell_tax = amount * selling_taxes_rates[0] / 100; 
 
       _last_tx[sender].cum_sell = _last_tx[sender].cum_sell + amount;
       _last_tx[sender].last_sell = block.timestamp;
@@ -301,7 +292,7 @@ contract projectX is Ownable, IERC20 {
         emit Approval(address(this), address(router), ~uint256(0));
       }
       
-      //odd numbers management -> half is smaller than amount.min(half)
+      //odd numbers management -> half is smaller than amount-min
       uint256 half = token_amount / 2;
       
       try router.swapExactTokensForETHSupportingFeeOnTransferTokens(half, 0, route, address(this), block.timestamp) {
