@@ -104,7 +104,7 @@ contract("Smartpool", accounts => {
       const bal_before = new BN(await web3.eth.getBalance(anon));
       await time.advanceTimeAndBlock(86401);
       const claimable = await x.computeReward.call({from: anon});
-      await x.claimReward({from: anon});
+      await truffleCost.log(x.claimReward({from: anon}), 'USD');
       reserve = reserve.add(claimable[1]);
       const bal_after = new BN(await web3.eth.getBalance(anon));
       amount_claimed = bal_after.sub(bal_before);
@@ -134,7 +134,7 @@ contract("Smartpool", accounts => {
       await time.advanceTimeAndBlock(86410);
       const bal_before = new BN(await web3.eth.getBalance(anon));
       const claimable = await x.computeReward.call({from: anon});
-      await x.claimReward({from: anon});
+      await truffleCost.log(x.claimReward({from: anon}), 'USD');
       const bal_after = new BN(await web3.eth.getBalance(anon));
       bal_after.should.be.a.bignumber.greaterThan(bal_before);
       const new_amount_claimed = bal_after.sub(bal_before);

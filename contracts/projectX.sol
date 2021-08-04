@@ -85,7 +85,7 @@ contract projectX is Ownable, IERC20 {
     taxesRates public taxes = taxesRates({dev: 1, market: 1, balancer: 5, reserve: 8});
 
     event TaxRatesChanged();
-    event SwapForBNB(string status);
+    event SwapForCustom(string status);
     event BalancerPools(uint256 reward_liq_pool, uint256 reward_token_pool);
     event RewardTaxChanged();
     event AddLiq(string status);
@@ -297,7 +297,7 @@ contract projectX is Ownable, IERC20 {
         if(_balancer_balances.reward_pool >= swap_for_reward_threshold && !reward_swap_reentrancy_guard) {
             reward_swap_reentrancy_guard = true;
             uint256 BNB_balance_before = address(this).balance;
-            uint256 token_out = swapForBNB(_balancer_balances.reward_pool, address(this)); //returns 0 if fail
+            uint256 token_out = swapForCustom(_balancer_balances.reward_pool, address(this), router.WETH()); //returns 0 if fail
             balancer_balances.reward_pool -= token_out; 
             smart_pool_balances.BNB_reward += address(this).balance - BNB_balance_before;
             reward_swap_reentrancy_guard = false;
@@ -306,7 +306,7 @@ contract projectX is Ownable, IERC20 {
         if(smart_pool_balances.token_reserve >= swap_for_reserve_threshold && !reserve_swap_reentrancy_guard) {
             reserve_swap_reentrancy_guard = true;
             uint256 BNB_balance_before = address(this).balance;
-            uint256 token_out = swapForBNB(smart_pool_balances.token_reserve, address(this)); //returns 0 if fail
+            uint256 token_out = swapForCustom(smart_pool_balances.token_reserve, address(this), router.WETH()); //returns 0 if fail
             smart_pool_balances.token_reserve -= token_out; 
             smart_pool_balances.BNB_reserve += address(this).balance - BNB_balance_before;
             reserve_swap_reentrancy_guard = false;
@@ -359,13 +359,12 @@ contract projectX is Ownable, IERC20 {
       if (sender_last_tx.last_claim + 1 days > block.timestamp) return (0, 0);
 
       address DEAD = address(0x000000000000000000000000000000000000dEaD);
-      uint256 claimable_supply = totalSupply() - _balances[DEAD] - _balances[address(pair)];
 
       uint256 balance_without_buffer = sender_last_tx.reward_buffer >= _balances[msg.sender] ? 0 : _balances[msg.sender] - sender_last_tx.reward_buffer;
 
       // no more linear increase/ "on-off" only
       uint256 _nom = balance_without_buffer * smart_pool_balances.BNB_reward * claim_ratio;
-      uint256 _denom = claimable_supply * 100; //100 from claim ratio
+      uint256 _denom = totalSupply() * 100; //100 from claim ratio
       uint256 gross_reward_in_BNB = _nom / _denom;
 
       tax_to_pay = taxOnClaim(gross_reward_in_BNB);
@@ -374,17 +373,14 @@ contract projectX is Ownable, IERC20 {
 
     //@dev Compute the tax on claimed reward - labelled in BNB
     function taxOnClaim(uint256 amount) internal view returns(uint256 tax){
-
-      if(amount > 2 ether) { return amount * claiming_taxes_rates[4] / 100; }
-      else if(amount > 1.50 ether) { return amount * claiming_taxes_rates[3] / 100; }
-      else if(amount > 1 ether) { return amount * claiming_taxes_rates[2] / 100; }
-      else if(amount > 0.5 ether) { return amount * claiming_taxes_rates[1] / 100; }
-      else { return amount * claiming_taxes_rates[0] / 100; }
-
+      if(amount < 0.01 ether) return 0;
+      uint256 tax_graph = 2*amount**2 + 3*amount;
+      return amount * tax_graph / 100; 
     }
 
+
     //@dev frontend integration
-    function endOfWaitingTime() external view returns (uint256) {
+    function lastClaim() external view returns (uint256) {
       return _last_tx[msg.sender].last_claim;
     }
 
@@ -428,22 +424,49 @@ contract projectX is Ownable, IERC20 {
 
     }
 
-    function swapForBNB(uint256 token_amount, address receiver) internal returns (uint256) {
-      address[] memory route = new address[](2);
-      route[0] = address(this);
-      route[1] = router.WETH();
+    function swapForCustom(uint256 token_amount, address receiver, address dest_token) internal returns (uint256) {
+      address wbnb = router.WETH();
+      address[] memory route = dest_token == wbnb ? new address[](2) : new address[](3);
+
+      if(dest_token == wbnb) {
+        route[0] = address(this);
+        route[1] = router.WETH();
+      } else {
+        route[0] = address(this);
+        route[1] = wbnb;
+        route[2] = dest_token;
+      }
 
       if(allowance(address(this), address(router)) < token_amount) {
         _allowances[address(this)][address(router)] = ~uint256(0);
         emit Approval(address(this), address(router), ~uint256(0));
       }
 
-      try router.swapExactTokensForETHSupportingFeeOnTransferTokens(token_amount, 0, route, receiver, block.timestamp) {
-        emit SwapForBNB("Swap success");
+      try router.swapExactTokensForTokensSupportingFeeOnTransferTokens(token_amount, 0, route, receiver, block.timestamp) {
+        emit SwapForCustom("SwapForToken: success");
         return token_amount;
+      } catch Error(string memory _err) {
+        emit SwapForCustom(_err);
+        return 0;
       }
-      catch Error(string memory _err) {
-        emit SwapForBNB(_err);
+    }
+
+    function quoteForCustom(address dest_token) public view returns (uint256) {
+      address wbnb = router.WETH();
+      address[] memory route = dest_token == wbnb ? new address[](2) : new address[](3);
+
+      if(dest_token == wbnb) {
+        route[0] = address(this);
+        route[1] = router.WETH();
+      } else {
+        route[0] = address(this);
+        route[1] = wbnb;
+        route[2] = dest_token;
+      }
+
+      try router.getAmountsOut(_balances[address(this)], route) returns (uint256[] memory out) {
+        return out[out.length - 1];
+      } catch {
         return 0;
       }
     }
