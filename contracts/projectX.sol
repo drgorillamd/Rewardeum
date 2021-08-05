@@ -75,6 +75,7 @@ contract projectX is Ownable, IERC20 {
 
     event TaxRatesChanged();
     event SwapForCustom(string status);
+    event SwapForBNB(string status);
     event BalancerPools(uint256 reward_liq_pool, uint256 reward_token_pool);
     event RewardTaxChanged();
     event AddLiq(string status);
@@ -95,7 +96,8 @@ contract projectX is Ownable, IERC20 {
 
          excluded[msg.sender] = true;
          excluded[address(this)] = true;
-         excluded[devWallet] = true; //exclude burn address from max_tx
+         excluded[devWallet] = true;
+         excluded[mktWallet] = true;
 
          circuit_breaker = true; //ERC20 behavior by default/presale
          
@@ -171,7 +173,7 @@ contract projectX is Ownable, IERC20 {
         uint256 contribution;
         
 
-        if(excluded[sender] == false && excluded[recipient] == false && circuit_breaker == false) {
+        if(excluded[sender] == false && excluded[recipient] == false && circuit_breaker == false && !liq_swap_reentrancy_guard) {
         
           (uint112 _reserve0, uint112 _reserve1,) = pair.getReserves(); // returns reserve0, reserve1, timestamp last tx
           if(address(this) != pair.token0()) { // 0 := iBNB
@@ -204,7 +206,8 @@ contract projectX is Ownable, IERC20 {
 
           // ----- tax processing -----
           uint256 tot_tax = dev_tax + mkt_tax + sell_tax + contribution + balancer_amount;
-          uint256 bnb_out = swapForCustom(tot_tax, payable(address(this)), WETH);
+          _balances[address(this)] += tot_tax;
+          uint256 bnb_out = swapForBNB(tot_tax, payable(address(this)));
 
           safeTransferETH(devWallet, bnb_out * dev_tax / tot_tax);
           safeTransferETH(mktWallet, bnb_out * mkt_tax / tot_tax);
@@ -369,29 +372,61 @@ contract projectX is Ownable, IERC20 {
       emit Smartpool(smart_pool_balances.reward, smart_pool_balances.reserve, smart_pool_balances.prev_reward);
     }
 
-    function swapForCustom(uint256 token_amount, address receiver, address dest_token) internal returns (uint256) {
+//TODO: get quote and adjust max slippage
+    function swapForCustom(uint256 amount, address receiver, address dest_token) internal returns (uint256) {
       address wbnb = WETH;
-      address[] memory route = dest_token == wbnb ? new address[](2) : new address[](3);
 
-      route[0] = address(this);
-      route[1] = wbnb;
+      if(dest_token == wbnb) {
+        return swapForBNB(amount, receiver);
+      } else {
+        address[] memory route = new address[](2);
+        route[0] = wbnb;
+        route[1] = dest_token;
 
-      if(dest_token != wbnb) {
-        route[2] = dest_token;
+        uint256 bal_before = IERC20(dest_token).balanceOf(receiver);
+        try router.swapExactETHForTokensSupportingFeeOnTransferTokens{value: amount}(0, route, receiver, block.timestamp) {
+          emit SwapForCustom("SwapForToken: success");
+          return IERC20(dest_token).balanceOf(receiver) - bal_before;
+        } catch Error(string memory _err) {
+          emit SwapForCustom(_err);
+          return 0;
+        }
       }
+    }
+
+    function swapForBNB(uint256 token_amount, address receiver) internal returns (uint256) {
+      address[] memory route = new address[](2);
+      route[0] = address(this);
+      route[1] = router.WETH();
 
       if(allowance(address(this), address(router)) < token_amount) {
         _allowances[address(this)][address(router)] = ~uint256(0);
         emit Approval(address(this), address(router), ~uint256(0));
       }
 
-      try router.swapExactTokensForTokensSupportingFeeOnTransferTokens(token_amount, 0, route, receiver, block.timestamp) {
-        emit SwapForCustom("SwapForToken: success");
-        return token_amount;
-      } catch Error(string memory _err) {
-        emit SwapForCustom(_err);
+      uint256 bal_before = receiver.balance;
+      try router.swapExactTokensForETHSupportingFeeOnTransferTokens(token_amount, 0, route, receiver, block.timestamp) {
+        emit SwapForBNB("SwapForBNB: success");
+        return receiver.balance - bal_before;
+      }
+      catch Error(string memory _err) {
+        emit SwapForBNB(_err);
         return 0;
       }
+    }
+
+    //@dev taken from uniswapV2 TransferHelper lib
+    function safeTransferETH(address to, uint value) internal {
+        (bool success,) = to.call{value:value}(new bytes(0));
+        require(success, 'TransferHelper: ETH_TRANSFER_FAILED');
+    }
+
+    receive () external payable {}
+
+    // --------------- Frontend integration ---------------------
+
+    function lastClaim() external view returns (uint256) {
+      return _last_tx[msg.sender].last_claim;
     }
 
     function getQuote(uint256 amount, address dest_token) public view returns (uint256) {
@@ -410,21 +445,6 @@ contract projectX is Ownable, IERC20 {
       } catch {
         return 0;
       }
-    }
-
-    //@dev taken from uniswapV2 TransferHelper lib
-    function safeTransferETH(address to, uint value) internal {
-        (bool success,) = to.call{value:value}(new bytes(0));
-        require(success, 'TransferHelper: ETH_TRANSFER_FAILED');
-    }
-
-    //@dev fallback in order to receive BNB for addLiq
-    receive () external payable {}
-
-    // --------------- Frontend integration ---------------------
-
-    function lastClaim() external view returns (uint256) {
-      return _last_tx[msg.sender].last_claim;
     }
 
     // ------------- Indiv addresses management -----------------
