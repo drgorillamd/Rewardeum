@@ -18,7 +18,7 @@ contract("Basic tests", accounts => {
   describe("Init state", () => {
     it("Initialized - return proper name()", async () => {
       const obs_name = await x.name();
-      assert.equal(obs_name, "ProjectX", "incorrect name returned")
+      assert.equal(obs_name, "Rewardeum", "incorrect name returned")
     });
 
     it("deployer = owner", async () => {

@@ -12,6 +12,8 @@ require('chai').use(require('chai-bn')(BN)).should();
 
 let x;
 
+const BUSD = "0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56";
+
 contract("Reward", accounts => {
 
   const to_send = 10**7;
@@ -45,13 +47,6 @@ contract("Reward", accounts => {
       assert.notEqual(LPBalance, 0, "No LP token received / check Uni pool");
     });
 
-    it("Lowering swap_for_reward_threshold Threshold", async () => {
-      await x.setSwapFor_Reward_Threshold(1);
-      const expected = new BN(1*10**9);
-      const val = await x.swap_for_reward_threshold.call();
-      val.should.be.a.bignumber.that.equals(expected);
-    });
-
   });
 
   //tricking the balancer to trigger a swap
@@ -68,20 +63,6 @@ contract("Reward", accounts => {
       await truffleAssert.passes(x.resetBalancer({from: accounts[0]}), "balancer reset failed");
     });
 
-  });
-
-  describe("Reward Mechanics: Swap", () => {
-    it("Transfers to trigger swap - wish me luck", async () => {
-      await x.transfer(accounts[1], 10**9, { from: accounts[0] });
-      await truffleCost.log(x.transfer(accounts[2], 10**9, { from: accounts[1] }));
-      const newBal = await x.balanceOf.call(accounts[2]);
-      assert.notEqual(newBal, 0, "Transfer Failure");
-    });
-
-    it("BNB balance", async () => {
-      const bal = await web3.eth.getBalance(x.address);
-      assert.notEqual(bal, 0, "Swap Failure");
-    });
   });
 
   describe("Reward Mechanics: Smartpool", () => {

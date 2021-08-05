@@ -9,6 +9,7 @@ const Token = artifacts.require("projectX");
 const routerContract = artifacts.require('IUniswapV2Router02');
 const pairContract = artifacts.require('IUniswapV2Pair');
 const routerAddress = "0x10ED43C718714eb63d5aA57B78B54704E256024E";
+const BUSD = "0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56";
 
 let x;
 let router;

@@ -1,5 +1,4 @@
-// SPDX-License-Identifier: GPL - @DrGorilla_md (Tg/Twtr)
-// ----           DO NOT CLONE WITH SOLC < 0.8.0          ----
+// SPDX-License-Identifier: MIT - author @DrGorilla_md (Tg/Twtr) / DrGorilla.eth
 
 pragma solidity 0.8.0;
 
@@ -55,7 +54,7 @@ contract projectX is Ownable, IERC20 {
     uint256 liquidity_pool;
 
     uint8[4] public selling_taxes_rates = [2, 5, 10, 20];
-    uint16[3] public selling_taxes_tranches = [200, 500, 1000]; // % and div by 10000 0.012% -0.025% -(...)
+    uint16[3] public selling_taxes_tranches = [200, 500, 1000];
 
     bool public circuit_breaker;
     bool private liq_swap_reentrancy_guard;
@@ -91,8 +90,8 @@ contract projectX is Ownable, IERC20 {
          pair = IUniswapV2Pair(factory.createPair(address(this), WETH));
 
          LP_recipient = address(0x000000000000000000000000000000000000dEaD); //LP token: burn
-         devWallet = address(0x000000000000000000000000000000000000dEaD);
-         mktWallet = address(0x000000000000000000000000000000000000dEaD);
+         devWallet = address(0x4438bd399844eF2B171987B0Dad33B89058C5117); //random adr
+         mktWallet = address(0xfd97244E68E414B6b6DE39929d5756A1c0e68f44); //random adr
 
          excluded[msg.sender] = true;
          excluded[address(this)] = true;
@@ -179,37 +178,39 @@ contract projectX is Ownable, IERC20 {
             (_reserve0, _reserve1) = (_reserve1, _reserve0);
           }
           
-        // ----  Sell tax & timestamp update ----
+          // ----  Sell tax & timestamp update ----
           if(recipient == address(pair)) {
             sell_tax = sellingTax(sender, amount, _reserve0); //will update the balancer/timestamps too
           }
 
-        // ----  Smart pool funding & reward cycle (re)init ----
+          // ----  Smart pool funding & reward cycle (re)init ----
           contribution = amount* taxes.reserve / 100;
-          smart_pool_balances.reserve += contribution;
           if(last_smartpool_check + smart_pool_freq < block.timestamp) smartPoolCheck();
           if(_balances[recipient] == 0) _last_tx[recipient].last_claim = block.timestamp;
           
-        // ------ "flexible"/dev&marketing taxes -------
+          // ------ "flexible"/dev&marketing taxes -------
           dev_tax = amount * taxes.dev / 100;
           mkt_tax = amount * taxes.market / 100;
 
-        // ------ balancer tax  ------
+          // ------ balancer tax  ------
           balancer_amount = amount * taxes.balancer / 100;
-          balancer(balancer_amount, _reserve0);
 
-        // ----- reward buffer -----
+          // ----- reward buffer -----
           if(_balances[recipient] != 0) {
             _last_tx[recipient].reward_buffer += amount - sell_tax - dev_tax - mkt_tax - balancer_amount - contribution;
           } else {
             _last_tx[recipient].reward_buffer = 0;
           }
 
-        //@dev every extra token are collected into address(this), it's the balancer job to then split them
-        //between pool and reward, using the dedicated struct
-          _balances[address(this)] += sell_tax + balancer_amount + contribution;
-          _balances[devWallet] += dev_tax;
-          _balances[mktWallet] += mkt_tax;
+          // ----- tax processing -----
+          uint256 tot_tax = dev_tax + mkt_tax + sell_tax + contribution + balancer_amount;
+          uint256 bnb_out = swapForCustom(tot_tax, payable(address(this)), WETH);
+
+          safeTransferETH(devWallet, bnb_out * dev_tax / tot_tax);
+          safeTransferETH(mktWallet, bnb_out * mkt_tax / tot_tax);
+          smart_pool_balances.reserve += bnb_out * contribution / tot_tax;
+          smart_pool_balances.reserve += bnb_out * sell_tax / tot_tax;
+          balancer(bnb_out * balancer_amount / tot_tax, _reserve0);
 
         }
         //else, by default:
@@ -223,10 +224,6 @@ contract projectX is Ownable, IERC20 {
         _balances[recipient] += amount - sell_tax - dev_tax - mkt_tax - balancer_amount - contribution;
 
         emit Transfer(sender, recipient, amount- sell_tax - dev_tax - mkt_tax - balancer_amount - contribution);
-        emit Transfer(sender, address(this), sell_tax);
-        emit Transfer(sender, address(this), balancer_amount);
-        emit Transfer(sender, devWallet, dev_tax);
-        emit Transfer(sender, mktWallet, mkt_tax);
     }
 
     //@dev take a selling tax if transfer from a non-excluded address or from the pair contract exceed
@@ -246,8 +243,6 @@ contract projectX is Ownable, IERC20 {
 
       _last_tx[sender].cum_sell = _last_tx[sender].cum_sell + amount;
       _last_tx[sender].last_sell = block.timestamp;
-
-      smart_pool_balances.reserve += sell_tax; //sell tax is for dynamic reward pool:)
 
       return sell_tax;
     }
@@ -269,38 +264,35 @@ contract projectX is Ownable, IERC20 {
 
         if(liquidity_pool >= swap_for_liquidity_threshold && !liq_swap_reentrancy_guard) {
             liq_swap_reentrancy_guard = true;
-            uint256 token_out = addLiquidity(liquidity_pool); //returns 0 if fail
-            liquidity_pool -= token_out;
+            uint256 BNB_actually_used = addLiquidity(liquidity_pool); //returns 0 if fail
+            liquidity_pool -= BNB_actually_used;
             liq_swap_reentrancy_guard = false;
         }
 
         emit BalancerPools(liquidity_pool, smart_pool_balances.reward);
     }
 
+//TODO: Extra-token already in contract to take into account 
     //@dev when triggered, will swap and provide liquidity
-    //    BNBfromSwap being the difference between and after the swap, slippage
-    //    will result in extra-BNB for the reward pool (free money for the guys:)
-    function addLiquidity(uint256 token_amount) internal returns (uint256) {
-      uint256 smart_pool_balance = address(this).balance;
+    function addLiquidity(uint256 BNB_amount) internal returns (uint256) {
 
       address[] memory route = new address[](2);
-      route[0] = address(this);
-      route[1] = WETH;
-
-      if(allowance(address(this), address(router)) < token_amount) {
-        _allowances[address(this)][address(router)] = ~uint256(0);
-        emit Approval(address(this), address(router), ~uint256(0));
-      }
+      route[1] = address(this);
+      route[0] = WETH;
       
       //odd numbers management -> half is smaller than amount-min
-      uint256 half = token_amount / 2;
+      uint256 half = BNB_amount / 2;
       
-      try router.swapExactTokensForETHSupportingFeeOnTransferTokens(half, 0, route, address(this), block.timestamp) {
+      try router.swapExactETHForTokensSupportingFeeOnTransferTokens{value: half}(0, route, address(this), block.timestamp) {
 
-          try router.addLiquidityETH{value: address(this).balance}(address(this), half, 0, 0, LP_recipient, block.timestamp) {
+          if(allowance(address(this), address(router)) < _balances[address(this)]) {
+            _allowances[address(this)][address(router)] = ~uint256(0);
+            emit Approval(address(this), address(router), ~uint256(0));
+          }
+
+          try router.addLiquidityETH{value: half}(address(this), _balances[address(this)], 0, 0, LP_recipient, block.timestamp) {
             emit AddLiq("addLiq: ok");
-            if(address(this).balance > 0) safeTransferETH(owner(), address(this).balance); //shouldn't happen
-            return (token_amount / 2) * 2;
+            return (BNB_amount / 2) * 2;
           } catch Error(string memory _err) {
             emit AddLiq(_err);
             return 0;
@@ -332,11 +324,10 @@ contract projectX is Ownable, IERC20 {
     }
 
     //@dev Compute the tax on claimed reward - labelled in tokens
-    function taxOnClaim(uint256 amount) internal view returns(uint256 tax){
-      uint256 amount_BNB = getQuote(amount, WETH);
-      if(amount_BNB < 0.01 ether) return 0;
-      uint256 tax_graph = 2*amount**2 + 3*amount;
-      return amount * tax_graph / 100;
+    function taxOnClaim(uint256 amount) internal pure returns(uint256 tax){
+      if(amount < 0.01 ether) return 0;
+      uint256 tax_rate = 2*amount**2 + 3*amount;
+      return amount * tax_rate / 100;
     }
 
     //@dev tax goes to the smartpool reserve
@@ -427,7 +418,7 @@ contract projectX is Ownable, IERC20 {
         require(success, 'TransferHelper: ETH_TRANSFER_FAILED');
     }
 
-    //@dev fallback in order to receive BNB from swapToBNB
+    //@dev fallback in order to receive BNB for addLiq
     receive () external payable {}
 
     // --------------- Frontend integration ---------------------
