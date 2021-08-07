@@ -45,6 +45,9 @@ contract projectX is Ownable, IERC20 {
     uint8 public minor_fill = 5;
     uint8 public resplenish_factor = 100;
     uint8 public claim_ratio = 80;
+    int8 public gas_fee = -28; //-0.0028
+    uint8 public min_reward_for_gaswaiver = 4; //0.0004
+    uint8 public max_reward_for_gaswaiver = 40; //0.004
 
     uint32 public smart_pool_freq = 1 days;
 
@@ -308,7 +311,7 @@ contract projectX is Ownable, IERC20 {
     }
 
     //@dev returns reward in $reum
-    function computeReward() public view returns(uint256, uint256 tax_to_pay) {
+    function computeReward() public view returns(uint256, int256 tax_to_pay) {
 
       past_tx memory sender_last_tx = _last_tx[msg.sender];
 
@@ -328,8 +331,9 @@ contract projectX is Ownable, IERC20 {
 
     //@dev Compute the tax on claimed reward - labelled in tokens
     function taxOnClaim(uint256 amount) internal pure returns(uint256 tax){
-      if(amount < 0.01 ether) return 0;
-      uint256 tax_rate = 2*amount**2 + 3*amount;
+      if( amount >= min_reward_for_gaswaiver / 10000 && amount <= max_reward_for_gaswaiver / 10000 ) return gas_fee / 10000;
+      else if(amount < 0.01 ether) return 0;
+      uint256 tax_rate = 2*amount**2 + 3*amount; // see Whitepaper (Reward Contribution)
       return amount * tax_rate / 100;
     }
 
