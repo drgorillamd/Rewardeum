@@ -41,10 +41,12 @@ contract projectX is Ownable, IERC20 {
 
     uint8 private _decimals = 9;
     uint8 public pcs_pool_to_circ_ratio = 10;
-    uint8 public excess_rate = 100;
+    uint8 public excess_rate = 200;
     uint8 public minor_fill = 5;
     uint8 public resplenish_factor = 100;
     uint8 public claim_ratio = 80;
+    uint8 public spike_threshold = 120; //detect spike in volume
+    uint8 public shock_absorber = 0; //percentage of spike go to smartPool (default: 80, at launch: 0)
 
     uint32 public smart_pool_freq = 1 days;
 
@@ -354,16 +356,21 @@ contract projectX is Ownable, IERC20 {
     function smartPoolCheck() internal {
       smartpool_struct memory _smart_pool_bal = smart_pool_balances;
 
-      if (_smart_pool_bal.reserve > _smart_pool_bal.reward * excess_rate / 100) {
+      if (_smart_pool_bal.reserve > _smart_pool_bal.reward * excess_rate / 100) {  // let the smartPool overflow to rewardPool
         smart_pool_balances.reward += _smart_pool_bal.reserve * minor_fill / 100;
         smart_pool_balances.reserve -= _smart_pool_bal.reserve * minor_fill / 100;
       }
-      if (_smart_pool_bal.reward < _smart_pool_bal.prev_reward) {
+      if (_smart_pool_bal.reward < _smart_pool_bal.prev_reward) {  // lower rewards than 24hrs ago?
         uint256 delta_reward = _smart_pool_bal.prev_reward - _smart_pool_bal.reward;
         if (_smart_pool_bal.reserve >= delta_reward) {
           smart_pool_balances.reward += delta_reward * resplenish_factor / 100;
           smart_pool_balances.reserve -= delta_reward * resplenish_factor / 100;
         }
+      }
+      if (_smart_pool_bal.reward > _smart_pool_bal.prev_reward * spike_threshold / 100) { // high spike in volume? let most go to smartPool
+        uint256 delta_reward = _smart_pool_bal.reward - _smart_pool_bal.prev_reward;
+        smart_pool_balances.reward -= delta_reward * shock_absorber / 100;
+        smart_pool_balances.reserve += delta_reward * shock_absorber / 100;
       }
       
       smart_pool_balances.prev_reward = _smart_pool_bal.reward;
