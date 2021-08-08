@@ -9,9 +9,9 @@ const Token = artifacts.require("projectX");
 const routerContract = artifacts.require('IUniswapV2Router02');
 const pairContract = artifacts.require('IUniswapV2Pair');
 const routerAddress = "0x10ED43C718714eb63d5aA57B78B54704E256024E";
-
 let x;
 let router;
+let WETH;
 
 contract("Smartpool", accounts => {
 
@@ -26,6 +26,7 @@ contract("Smartpool", accounts => {
     await Token.new(routerAddress);
     x = await Token.deployed();
     router = await routerContract.at(routerAddress);
+    WETH = await router.WETH();
   });
 
   describe("Setting the Scene", () => {
@@ -104,7 +105,7 @@ contract("Smartpool", accounts => {
       const bal_before = new BN(await web3.eth.getBalance(anon));
       await time.advanceTimeAndBlock(86401);
       const claimable = await x.computeReward.call({from: anon});
-      await x.claimReward({from: anon});
+      await truffleCost.log(x.claimReward(WETH, {from: anon}));
       reserve = reserve.add(claimable[1]);
       const bal_after = new BN(await web3.eth.getBalance(anon));
       amount_claimed = bal_after.sub(bal_before);
@@ -134,7 +135,7 @@ contract("Smartpool", accounts => {
       await time.advanceTimeAndBlock(86410);
       const bal_before = new BN(await web3.eth.getBalance(anon));
       const claimable = await x.computeReward.call({from: anon});
-      await x.claimReward({from: anon});
+      await x.claimReward(WETH, {from: anon});
       const bal_after = new BN(await web3.eth.getBalance(anon));
       bal_after.should.be.a.bignumber.greaterThan(bal_before);
       const new_amount_claimed = bal_after.sub(bal_before);

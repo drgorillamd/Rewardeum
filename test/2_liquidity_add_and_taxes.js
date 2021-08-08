@@ -65,7 +65,7 @@ contract("LP and taxes", accounts => {
       const sender = accounts[1];
       const receiver = accounts[2];
       await x.transfer(sender, to_send, { from: accounts[0] });
-      await truffleCost.log(x.transfer(receiver, to_send, { from: sender }), 'USD');
+      await truffleCost.log(x.transfer(receiver, to_send, { from: sender }));
       const newBal = await x.balanceOf.call(receiver);
       newBal.should.be.a.bignumber.that.equals(to_receive);
     });
@@ -86,7 +86,7 @@ contract("LP and taxes", accounts => {
       const init_token = await x.balanceOf.call(seller);
 
       let _ = await x.approve(routerAddress, init_token+1, {from: seller});
-      const res2 = await router.swapExactTokensForETHSupportingFeeOnTransferTokens(init_token, 0, route_sell, seller, 1907352278, {from: seller});
+      const res2 = await truffleCost.log(router.swapExactTokensForETHSupportingFeeOnTransferTokens(init_token, 0, route_sell, seller, 1907352278, {from: seller}));
       const end_bal = await web3.eth.getBalance(seller);
 
       end_bal.should.be.a.bignumber.lessThan(init_bal);

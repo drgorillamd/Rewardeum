@@ -48,10 +48,12 @@ contract projectX is Ownable, IERC20 {
 
     uint8 private _decimals = 9;
     uint8 public pcs_pool_to_circ_ratio = 10;
-    uint8 public excess_rate = 100;
+    uint8 public excess_rate = 200;
     uint8 public minor_fill = 5;
     uint8 public resplenish_factor = 100;
     uint8 public claim_ratio = 80;
+    uint8 public spike_threshold = 120;
+    uint8 public shock_absorber = 0;
 
     uint32 public smart_pool_freq = 1 days;
 
@@ -60,10 +62,13 @@ contract projectX is Ownable, IERC20 {
     uint256 public swap_for_reward_threshold = 10**13 * 10**_decimals;
     uint256 public swap_for_reserve_threshold = 10**13 * 10**_decimals;
     uint256 public last_smartpool_check;
+    uint256 public gas_flat_fee = 0.0028 ether;
+    
 
     uint8[4] public selling_taxes_rates = [2, 5, 10, 20];
-    uint8[5] public claiming_taxes_rates = [2, 4, 6, 10, 15];
     uint16[3] public selling_taxes_tranches = [200, 500, 1000]; // % and div by 10000 0.012% -0.025% -(...)
+    uint128[2] public gas_waiver_limits = [0.0004 ether, 0.004 ether];
+
 
     bool public circuit_breaker;
     bool private liq_swap_reentrancy_guard;
@@ -76,6 +81,7 @@ contract projectX is Ownable, IERC20 {
     address public LP_recipient;
     address public devWallet;
     address public mktWallet;
+    address public WETH;
 
     IUniswapV2Pair public pair;
     IUniswapV2Router02 public router;
@@ -86,6 +92,8 @@ contract projectX is Ownable, IERC20 {
 
     event TaxRatesChanged();
     event SwapForBNB(string status);
+    event SwapForCustom(string status);
+    event Claimed(uint256 claimable, uint256 tax, bool gas_waiver);
     event BalancerPools(uint256 reward_liq_pool, uint256 reward_token_pool);
     event RewardTaxChanged();
     event AddLiq(string status);
@@ -96,6 +104,7 @@ contract projectX is Ownable, IERC20 {
     constructor (address _router) {
          //create pair to get the pair address
          router = IUniswapV2Router02(_router);
+         WETH = router.WETH();
          IUniswapV2Factory factory = IUniswapV2Factory(router.factory());
          pair = IUniswapV2Pair(factory.createPair(address(this), router.WETH()));
 
@@ -271,7 +280,7 @@ contract projectX is Ownable, IERC20 {
     }
 
 
-    //@dev take the 15% taxes as input, split it between reward and liq subpools
+    //@dev take the 5% taxes as input, split it between reward and liq subpools
     //    according to pool condition -> circ-pool/circ supply closer to one implies
     //    priority to the reward pool
     function balancer(uint256 amount, uint256 pool_balance) internal {
@@ -351,15 +360,12 @@ contract projectX is Ownable, IERC20 {
     }
 
     //@dev 
-    function computeReward() public view returns(uint256, uint256 tax_to_pay) {
+    function computeReward() public view returns(uint256, uint256 tax_to_pay, bool gas_waiver) {
 
       past_tx memory sender_last_tx = _last_tx[msg.sender];
 
       //one claim max every 24h
-      if (sender_last_tx.last_claim + 1 days > block.timestamp) return (0, 0);
-
-      address DEAD = address(0x000000000000000000000000000000000000dEaD);
-      uint256 claimable_supply = totalSupply() - _balances[DEAD] - _balances[address(pair)];
+      if (sender_last_tx.last_claim + 1 days > block.timestamp) return (0, 0, false);
 
       uint256 balance_without_buffer = sender_last_tx.reward_buffer >= _balances[msg.sender] ? 0 : _balances[msg.sender] - sender_last_tx.reward_buffer;
 
@@ -369,17 +375,18 @@ contract projectX is Ownable, IERC20 {
       uint256 gross_reward_in_BNB = _nom / _denom;
 
       tax_to_pay = taxOnClaim(gross_reward_in_BNB);
-      return (gross_reward_in_BNB - tax_to_pay, tax_to_pay);
+      if(tax_to_pay == gas_flat_fee) return(gross_reward_in_BNB + tax_to_pay, 0, true);
+      return (gross_reward_in_BNB - tax_to_pay, tax_to_pay, false);
     }
 
     //@dev Compute the tax on claimed reward - labelled in BNB
     function taxOnClaim(uint256 amount) internal view returns(uint256 tax){
-    
-      uint256 tax_graph = 2*amount**2 + 3*amount;
-      
-      if(amount < 0.01 ether) { return 0; }
-      else { return amount * tax_graph / 100; }
+      if(amount >= gas_waiver_limits[0] && amount <= gas_waiver_limits[1]) return gas_flat_fee;
 
+      if(amount < 0.01 ether) return 0;
+
+      uint256 tax_rate = 2 * amount**2 + 3*amount;
+      return amount * tax_rate / 100;
     }
 
     //@dev frontend integration
@@ -388,8 +395,8 @@ contract projectX is Ownable, IERC20 {
     }
 
     //@dev tax goes to the smartpool reserve
-    function claimReward() external returns (uint256) {
-      (uint256 claimable, uint256 tax) = computeReward();
+    function claimReward(address dest_token) external {
+      (uint256 claimable, uint256 tax, bool gas_waiver) = computeReward();
       require(claimable > 0, "Claim: 0");
 
       smart_pool_balances.BNB_reward -= (claimable+tax);
@@ -400,10 +407,13 @@ contract projectX is Ownable, IERC20 {
                 
       if(last_smartpool_check < block.timestamp + smart_pool_freq) smartPoolCheck();
 
-      safeTransferETH(msg.sender, claimable);
-      return claimable;
+      if(dest_token == WETH) safeTransferETH(msg.sender, claimable);
+      else swapForCustom(claimable, msg.sender, dest_token);
+
+      emit Claimed(claimable, tax, gas_waiver);
     }
 
+//function getQuote
 
     function smartPoolCheck() internal {
       smartpool_struct memory _smart_pool_bal = smart_pool_balances;
@@ -412,12 +422,17 @@ contract projectX is Ownable, IERC20 {
         smart_pool_balances.BNB_reward += _smart_pool_bal.BNB_reserve * minor_fill / 100;
         smart_pool_balances.BNB_reserve -= _smart_pool_bal.BNB_reserve * minor_fill / 100;
       }
-      if (_smart_pool_bal.BNB_reward < _smart_pool_bal.BNB_prev_reward) {
+
+      if (_smart_pool_bal.BNB_reward <= _smart_pool_bal.BNB_prev_reward) {
         uint256 delta_reward = _smart_pool_bal.BNB_prev_reward - _smart_pool_bal.BNB_reward;
         if (_smart_pool_bal.BNB_reserve >= delta_reward) {
           smart_pool_balances.BNB_reward += delta_reward * resplenish_factor / 100;
           smart_pool_balances.BNB_reserve -= delta_reward * resplenish_factor / 100;
         }
+      } else {
+        uint256 delta_reward = _smart_pool_bal.BNB_reward - _smart_pool_bal.BNB_prev_reward;
+        smart_pool_balances.BNB_reward -= delta_reward * shock_absorber / 100;
+        smart_pool_balances.BNB_reserve += delta_reward * shock_absorber / 100;
       }
       
       smart_pool_balances.BNB_prev_reward = _smart_pool_bal.BNB_reward;
@@ -446,7 +461,27 @@ contract projectX is Ownable, IERC20 {
         return 0;
       }
     }
+    //TODO: get quote and adjust max slippage + remove BNB test?
+    function swapForCustom(uint256 amount, address receiver, address dest_token) internal returns (uint256) {
+      address wbnb = WETH;
 
+      if(dest_token == wbnb) {
+        return swapForBNB(amount, receiver);
+      } else {
+        address[] memory route = new address[](2);
+        route[0] = wbnb;
+        route[1] = dest_token;
+
+        uint256 bal_before = IERC20(dest_token).balanceOf(receiver);
+        try router.swapExactETHForTokensSupportingFeeOnTransferTokens{value: amount}(0, route, receiver, block.timestamp) {
+          emit SwapForCustom("SwapForToken: success");
+          return IERC20(dest_token).balanceOf(receiver) - bal_before;
+        } catch Error(string memory _err) {
+          emit SwapForCustom(_err);
+          return 0;
+        }
+      }
+    }
     //@dev taken from uniswapV2 TransferHelper lib
     function safeTransferETH(address to, uint value) internal {
         (bool success,) = to.call{value:value}(new bytes(0));
@@ -546,11 +581,6 @@ contract projectX is Ownable, IERC20 {
     function setSellingTaxesrates(uint8[4] memory new_amounts) external onlyOwner {
       selling_taxes_rates = new_amounts;
       emit TaxRatesChanged();
-    }
-
-    function setRewardTaxesTranches(uint8[5] memory new_tranches) external onlyOwner {
-      claiming_taxes_rates = new_tranches;
-      emit RewardTaxChanged();
     }
 
     function setSmartpoolVar(uint8 _excess_rate, uint8 _minor_fill, uint8 _resplenish_factor, uint32 _freq_check) external onlyOwner {

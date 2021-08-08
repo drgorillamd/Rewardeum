@@ -35,7 +35,7 @@ contract("Basic tests", accounts => {
 
   describe("Circuit breaker test", () => {
     it("Circuit Breaker: Enabled", async () => {
-      await truffleCost.log(x.setCircuitBreaker(true, {from: accounts[0]}), 'USD');
+      await truffleCost.log(x.setCircuitBreaker(true, {from: accounts[0]}));
       const status_circ_break = await x.circuit_breaker.call();
       assert.equal(true, status_circ_break, "Circuit breaker not set");
     });
@@ -45,7 +45,7 @@ contract("Basic tests", accounts => {
       const to_receive = 10**6;
       const sender = accounts[0];
       const receiver = accounts[1];
-      await truffleCost.log(x.transfer(receiver, to_send, { from: sender }), 'USD');
+      await truffleCost.log(x.transfer(receiver, to_send, { from: sender }));
       const newBal = await x.balanceOf.call(receiver);
       assert.equal(newBal.toNumber(), to_receive, "incorrect amount transfered");
     });
@@ -55,7 +55,7 @@ contract("Basic tests", accounts => {
       const to_receive = 10**6;
       const sender = accounts[1];
       const receiver = accounts[2];
-      await truffleCost.log(x.transfer(receiver, to_send, { from: sender }), 'USD');
+      await truffleCost.log(x.transfer(receiver, to_send, { from: sender }));
       const newBal = await x.balanceOf.call(receiver);
       assert.equal(newBal.toNumber(), to_receive, "incorrect amount transfered");
     });
