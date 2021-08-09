@@ -131,12 +131,15 @@ contract projectX is Ownable, IERC20 {
       available_tokens["BUSD"] = address(0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56);
       available_tokens["USDT"] = address(0x55d398326f99059fF775485246999027B3197955);
       available_tokens["ADA"] = address(0x3EE2200Efb3400fAbB9AacF31297cBdD1d435D47);
+      available_tokens["MATIC"] = address(0xcc42724c6683b7e57334c4e856f4c9965ed682bd);
+      
       tickers_claimable.push("REUM");
       tickers_claimable.push("BTCB");
       tickers_claimable.push("ETH");
       tickers_claimable.push("BUSD");
       tickers_claimable.push("USDT");
       tickers_claimable.push("ADA");
+      tickers_claimable.push("MATIC");
 
       _balances[msg.sender] = _totalSupply;
       emit Transfer(address(0), msg.sender, _totalSupply);
