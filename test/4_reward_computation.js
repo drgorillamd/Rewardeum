@@ -101,11 +101,23 @@ contract("Smartpool", accounts => {
       console.log("reserve token : "+SPBal[3].toString());
     });
 
-    it("Claim at +24h", async () => {
-      const bal_before = new BN(await web3.eth.getBalance(anon));
+    it("Quote at +24h", async () => {
       await time.advanceTimeAndBlock(86401);
       const claimable = await x.computeReward.call({from: anon});
-      await truffleCost.log(x.claimReward(WETH, {from: anon}));
+      console.log("claimable : " + claimable[0]);
+      let ticker;
+      let res;
+      for(let i=0; i<7; i++){
+        ticker = await x.tickers_claimable.call(i);
+        res = await x.getQuote.call(claimable[0], ticker)
+        console.log(ticker+" : "+res.toString());
+      }
+    })
+
+    it("Claim at +24h", async () => {
+      const bal_before = new BN(await web3.eth.getBalance(anon));
+      const claimable = await x.computeReward.call({from: anon});
+      await truffleCost.log(x.claimReward('WBNB', {from: anon}));
       reserve = reserve.add(claimable[1]);
       const bal_after = new BN(await web3.eth.getBalance(anon));
       amount_claimed = bal_after.sub(bal_before);
@@ -135,7 +147,7 @@ contract("Smartpool", accounts => {
       await time.advanceTimeAndBlock(86410);
       const bal_before = new BN(await web3.eth.getBalance(anon));
       const claimable = await x.computeReward.call({from: anon});
-      await x.claimReward(WETH, {from: anon});
+      await x.claimReward('WBNB', {from: anon});
       const bal_after = new BN(await web3.eth.getBalance(anon));
       bal_after.should.be.a.bignumber.greaterThan(bal_before);
       const new_amount_claimed = bal_after.sub(bal_before);

@@ -126,6 +126,7 @@ contract projectX is Ownable, IERC20 {
       circuit_breaker = true; //ERC20 behavior by default/presale
 
       available_tokens["REUM"] = address(this);
+      available_tokens["WBNB"] = WETH;
       available_tokens["BTCB"] = address(0x7130d2A12B9BCbFAe4f2634d864A1Ee1Ce3Ead9c);
       available_tokens["ETH"] = address(0x2170Ed0880ac9A755fd29B2688956BD959F933F8);
       available_tokens["BUSD"] = address(0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56);
@@ -134,6 +135,7 @@ contract projectX is Ownable, IERC20 {
       available_tokens["MATIC"] = address(0xCC42724C6683B7E57334c4E856f4c9965ED682bD);
       
       tickers_claimable.push("REUM");
+      tickers_claimable.push("WBNB");
       tickers_claimable.push("BTCB");
       tickers_claimable.push("ETH");
       tickers_claimable.push("BUSD");
@@ -491,7 +493,7 @@ contract projectX is Ownable, IERC20 {
         return 0;
       }
     }
-    //TODO: get quote and adjust max slippage + remove BNB test?
+    //TODO: get quote and max slippage !!!
     function swapForCustom(uint256 amount, address receiver, address dest_token) internal returns (uint256) {
       address wbnb = WETH;
 
@@ -516,10 +518,10 @@ contract projectX is Ownable, IERC20 {
     function getQuote(uint256 amount, string calldata ticker) external view returns (uint256) {
       address wbnb = WETH;
       address dest_token = available_tokens[ticker];
-      require(available_tokens[ticker] != address(0));
-      require(keccak256(abi.encodePacked(ticker)) == keccak256(abi.encodePacked("WBNB")));
-      address[] memory route = new address[](2);
+      if(available_tokens[ticker] == address(0)) return 0;
+      if(keccak256(abi.encodePacked(ticker)) == keccak256(abi.encodePacked("WBNB"))) return amount;
 
+      address[] memory route = new address[](2);
       route[0] = wbnb;
       route[1] = dest_token;
 
