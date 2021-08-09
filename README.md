@@ -1,6 +1,6 @@
-# project X?
+# Rewardeum(REUM)
 
-npm i truffle
+install, after cloning :
 npm i
 
 run tests :
