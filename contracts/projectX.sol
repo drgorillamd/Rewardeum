@@ -45,6 +45,8 @@ contract projectX is Ownable, IERC20 {
     mapping (address => past_tx) private _last_tx;
     mapping (address => mapping (address => uint256)) private _allowances;
     mapping (address => bool) private excluded;
+    mapping (string => address) public available_tokens;
+    mapping (string => uint256) public custom_claimed;
 
     uint8 private _decimals = 9;
     uint8 public pcs_pool_to_circ_ratio = 10;
@@ -63,6 +65,7 @@ contract projectX is Ownable, IERC20 {
     uint256 public swap_for_reserve_threshold = 10**13 * 10**_decimals;
     uint256 public last_smartpool_check;
     uint256 public gas_flat_fee = 0.0028 ether;
+    uint256 public total_claimed;
     
 
     uint8[4] public selling_taxes_rates = [2, 5, 10, 20];
@@ -75,8 +78,9 @@ contract projectX is Ownable, IERC20 {
     bool private reward_swap_reentrancy_guard;
     bool private reserve_swap_reentrancy_guard;
 
-    string private _name = "ProjectX";
-    string private _symbol = "X";
+    string private _name = "Rewardeum";
+    string private _symbol = "REUM";
+    string[] public tickers_claimable;
 
     address public LP_recipient;
     address public devWallet;
@@ -93,33 +97,49 @@ contract projectX is Ownable, IERC20 {
     event TaxRatesChanged();
     event SwapForBNB(string status);
     event SwapForCustom(string status);
-    event Claimed(uint256 claimable, uint256 tax, bool gas_waiver);
+    event Claimed(string ticker, uint256 claimable, uint256 tax, bool gas_waiver);
     event BalancerPools(uint256 reward_liq_pool, uint256 reward_token_pool);
     event RewardTaxChanged();
     event AddLiq(string status);
     event BalancerReset(uint256 new_reward_token_pool, uint256 new_reward_liq_pool);
     event Smartpool(uint256 reward, uint256 reserve, uint256 prev_reward);
     event SmartpoolOverride(uint256 new_reward, uint256 new_reserve);
+    event AddClaimableToken(string ticker, address token);
+    event RemoveClaimableToken(string ticker);
 
     constructor (address _router) {
-         //create pair to get the pair address
-         router = IUniswapV2Router02(_router);
-         WETH = router.WETH();
-         IUniswapV2Factory factory = IUniswapV2Factory(router.factory());
-         pair = IUniswapV2Pair(factory.createPair(address(this), router.WETH()));
+      //create pair to get the pair address
+      router = IUniswapV2Router02(_router);
+      WETH = router.WETH();
+      IUniswapV2Factory factory = IUniswapV2Factory(router.factory());
+      pair = IUniswapV2Pair(factory.createPair(address(this), router.WETH()));
 
-         LP_recipient = address(0x000000000000000000000000000000000000dEaD); //LP token: burn
-         devWallet = address(0x000000000000000000000000000000000000dEaD);
-         mktWallet = address(0x000000000000000000000000000000000000dEaD);
+      LP_recipient = address(0x000000000000000000000000000000000000dEaD); //LP token: burn
+      devWallet = address(0x000000000000000000000000000000000000dEaD);
+      mktWallet = address(0x000000000000000000000000000000000000dEaD);
 
-         excluded[msg.sender] = true;
-         excluded[address(this)] = true;
-         excluded[devWallet] = true; //exclude burn address from max_tx
+      excluded[msg.sender] = true;
+      excluded[address(this)] = true;
+      excluded[devWallet] = true;
+      excluded[mktWallet] = true;
 
-         circuit_breaker = true; //ERC20 behavior by default/presale
-         
-         _balances[msg.sender] = _totalSupply;
-         emit Transfer(address(0), msg.sender, _totalSupply);
+      circuit_breaker = true; //ERC20 behavior by default/presale
+
+      available_tokens["REUM"] = address(this);
+      available_tokens["BTCB"] = address(0x7130d2A12B9BCbFAe4f2634d864A1Ee1Ce3Ead9c);
+      available_tokens["ETH"] = address(0x2170Ed0880ac9A755fd29B2688956BD959F933F8);
+      available_tokens["BUSD"] = address(0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56);
+      available_tokens["USDT"] = address(0x55d398326f99059fF775485246999027B3197955);
+      available_tokens["ADA"] = address(0x3EE2200Efb3400fAbB9AacF31297cBdD1d435D47);
+      tickers_claimable.push("REUM");
+      tickers_claimable.push("BTCB");
+      tickers_claimable.push("ETH");
+      tickers_claimable.push("BUSD");
+      tickers_claimable.push("USDT");
+      tickers_claimable.push("ADA");
+
+      _balances[msg.sender] = _totalSupply;
+      emit Transfer(address(0), msg.sender, _totalSupply);
     }
 
     function decimals() public view returns (uint256) {
@@ -395,9 +415,13 @@ contract projectX is Ownable, IERC20 {
     }
 
     //@dev tax goes to the smartpool reserve
-    function claimReward(address dest_token) external {
+    function claimReward(string memory ticker) external {
       (uint256 claimable, uint256 tax, bool gas_waiver) = computeReward();
       require(claimable > 0, "Claim: 0");
+
+      address dest_token = available_tokens[ticker];
+      require(dest_token != address(0), "Claim: invalid dest token");
+
 
       smart_pool_balances.BNB_reward -= (claimable+tax);
       smart_pool_balances.BNB_reserve += tax;
@@ -410,7 +434,9 @@ contract projectX is Ownable, IERC20 {
       if(dest_token == WETH) safeTransferETH(msg.sender, claimable);
       else swapForCustom(claimable, msg.sender, dest_token);
 
-      emit Claimed(claimable, tax, gas_waiver);
+      custom_claimed[ticker]++;
+      total_claimed += claimable;
+      emit Claimed(ticker, claimable, tax, gas_waiver);
     }
 
 //function getQuote
@@ -418,18 +444,19 @@ contract projectX is Ownable, IERC20 {
     function smartPoolCheck() internal {
       smartpool_struct memory _smart_pool_bal = smart_pool_balances;
 
-      if (_smart_pool_bal.BNB_reserve > _smart_pool_bal.BNB_reward * excess_rate / 100) {
+      if(_smart_pool_bal.BNB_reserve > _smart_pool_bal.BNB_reward * excess_rate / 100) {
         smart_pool_balances.BNB_reward += _smart_pool_bal.BNB_reserve * minor_fill / 100;
         smart_pool_balances.BNB_reserve -= _smart_pool_bal.BNB_reserve * minor_fill / 100;
       }
 
-      if (_smart_pool_bal.BNB_reward <= _smart_pool_bal.BNB_prev_reward) {
+      if(_smart_pool_bal.BNB_reward <= _smart_pool_bal.BNB_prev_reward) {
         uint256 delta_reward = _smart_pool_bal.BNB_prev_reward - _smart_pool_bal.BNB_reward;
         if (_smart_pool_bal.BNB_reserve >= delta_reward) {
           smart_pool_balances.BNB_reward += delta_reward * resplenish_factor / 100;
           smart_pool_balances.BNB_reserve -= delta_reward * resplenish_factor / 100;
         }
-      } else {
+      }
+      if(_smart_pool_bal.BNB_reward > _smart_pool_bal.BNB_prev_reward * spike_threshold / 100) {
         uint256 delta_reward = _smart_pool_bal.BNB_reward - _smart_pool_bal.BNB_prev_reward;
         smart_pool_balances.BNB_reward -= delta_reward * shock_absorber / 100;
         smart_pool_balances.BNB_reserve += delta_reward * shock_absorber / 100;
@@ -534,6 +561,26 @@ contract projectX is Ownable, IERC20 {
     }
 
     //  --------------  setters ---------------------
+
+    function addClaimable(address new_token, string memory ticker) external onlyOwner {
+      available_tokens[ticker] = new_token;
+      tickers_claimable.push(ticker);
+      emit AddClaimableToken(ticker, new_token);
+    }
+
+    function removeClaimable(string memory ticker) external onlyOwner {
+      delete available_tokens[ticker];
+
+      string[] memory _tickers_claimable = tickers_claimable;
+      for(uint i=0; i<_tickers_claimable.length; i++) {
+        if(keccak256(abi.encodePacked(_tickers_claimable[i])) == keccak256(abi.encodePacked(ticker))) {
+          tickers_claimable[i] = _tickers_claimable[tickers_claimable.length - 1];
+          break;
+        }
+      }
+      tickers_claimable.pop();
+      emit RemoveClaimableToken(ticker);
+    }
 
     //@dev will bypass all the taxes and act as erc20.
     //     pools & balancer balances will remain untouched
