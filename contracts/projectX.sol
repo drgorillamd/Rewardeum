@@ -131,7 +131,7 @@ contract projectX is Ownable, IERC20 {
       available_tokens["BUSD"] = address(0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56);
       available_tokens["USDT"] = address(0x55d398326f99059fF775485246999027B3197955);
       available_tokens["ADA"] = address(0x3EE2200Efb3400fAbB9AacF31297cBdD1d435D47);
-      available_tokens["MATIC"] = address(0xcc42724c6683b7e57334c4e856f4c9965ed682bd);
+      available_tokens["MATIC"] = address(0xCC42724C6683B7E57334c4E856f4c9965ED682bD);
       
       tickers_claimable.push("REUM");
       tickers_claimable.push("BTCB");
@@ -418,7 +418,7 @@ contract projectX is Ownable, IERC20 {
     }
 
     //@dev tax goes to the smartpool reserve
-    function claimReward(string memory ticker) external {
+    function claimReward(string calldata ticker) external {
       (uint256 claimable, uint256 tax, bool gas_waiver) = computeReward();
       require(claimable > 0, "Claim: 0");
 
@@ -512,6 +512,24 @@ contract projectX is Ownable, IERC20 {
         }
       }
     }
+
+    function getQuote(uint256 amount, string calldata ticker) external view returns (uint256) {
+      address wbnb = WETH;
+      address dest_token = available_tokens[ticker];
+      require(available_tokens[ticker] != address(0));
+      require(keccak256(abi.encodePacked(ticker)) == keccak256(abi.encodePacked("WBNB")));
+      address[] memory route = new address[](2);
+
+      route[0] = wbnb;
+      route[1] = dest_token;
+
+      try router.getAmountsOut(amount, route) returns (uint256[] memory out) {
+        return out[out.length - 1];
+      } catch {
+        return 0;
+      }
+    }
+
     //@dev taken from uniswapV2 TransferHelper lib
     function safeTransferETH(address to, uint value) internal {
         (bool success,) = to.call{value:value}(new bytes(0));
