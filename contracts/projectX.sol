@@ -571,6 +571,8 @@ contract projectX is Ownable, IERC20 {
     function removeClaimable(string memory ticker) external onlyOwner {
       delete available_tokens[ticker];
 
+      delete custom_claimed[ticker];
+
       string[] memory _tickers_claimable = tickers_claimable;
       for(uint i=0; i<_tickers_claimable.length; i++) {
         if(keccak256(abi.encodePacked(_tickers_claimable[i])) == keccak256(abi.encodePacked(ticker))) {
@@ -579,6 +581,7 @@ contract projectX is Ownable, IERC20 {
         }
       }
       tickers_claimable.pop();
+
       emit RemoveClaimableToken(ticker);
     }
 
