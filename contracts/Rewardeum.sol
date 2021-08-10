@@ -10,7 +10,7 @@ import "@uniswap/v2-core/contracts/interfaces/IUniswapV2Factory.sol";
 import "@uniswap/v2-core/contracts/interfaces/IUniswapV2Pair.sol";
 
 interface IVault {
-  function claim(string memory ticker, address dest) returns (bool);
+  function claim(string memory ticker, address dest) external returns (bool);
 }
 
 contract Rewardeum is Ownable, IERC20 {
@@ -73,7 +73,6 @@ contract Rewardeum is Ownable, IERC20 {
   uint16[3] public selling_taxes_tranches = [200, 500, 1000]; // % and div by 10000 0.012% -0.025% -(...)
   uint128[2] public gas_waiver_limits = [0.0004 ether, 0.004 ether];
 
-
   bool public circuit_breaker;
   bool private liq_swap_reentrancy_guard;
   bool private reward_swap_reentrancy_guard;
@@ -88,6 +87,7 @@ contract Rewardeum is Ownable, IERC20 {
   address public mktWallet;
   address public WETH;
 
+  IVault main_vault;
   IUniswapV2Pair public pair;
   IUniswapV2Router02 public router;
 
@@ -436,9 +436,9 @@ contract Rewardeum is Ownable, IERC20 {
     if(last_smartpool_check < block.timestamp + smart_pool_freq) smartPoolCheck();
 
     if(dest_token == WETH) safeTransferETH(msg.sender, claimable);
-    else if(dest_token == vault_address) {
-      IVault.claim(ticker, msg.sender); //multiple bonuses -> same vault address, key passed to get the correct one in vault contract
-      safeTransferETH(vault_address, claimable);
+    else if(dest_token == address(main_vault)) {
+      main_vault.claim(ticker, msg.sender); //multiple bonuses -> same vault address, key passed to get the correct one in vault contract
+      //safeTransferETH(address(main_vault), claimable);
     }
     else swapForCustom(claimable, msg.sender, dest_token);
 
@@ -545,7 +545,7 @@ contract Rewardeum is Ownable, IERC20 {
 
   function validateCustomTickers() external view returns (string memory) {
     for(uint i = 0; i < tickers_claimable.length; i++) {
-      if(available_tokens[tickers_claimable[i]] != vault_address &&
+      if(available_tokens[tickers_claimable[i]] != address(main_vault) &&
         keccak256(abi.encodePacked(ERC20(available_tokens[tickers_claimable[i]]).symbol()))
         != keccak256(abi.encodePacked(tickers_claimable[i])))
         return(tickers_claimable[i]);
@@ -615,7 +615,7 @@ contract Rewardeum is Ownable, IERC20 {
 //  --------------  setters ---------------------
 
   function setVault(address new_vault) external onlyOwner {
-    vault_address = new_vault;
+    main_vault = IVault(new_vault);
   }
 
   function addClaimable(address new_token, string memory ticker) external onlyOwner {
