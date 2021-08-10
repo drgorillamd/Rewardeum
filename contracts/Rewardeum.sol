@@ -13,7 +13,7 @@ interface IVault {
   function claim(string memory ticker, address dest) returns (bool);
 }
 
-contract projectX is Ownable, IERC20 {
+contract Rewardeum is Ownable, IERC20 {
 
   struct past_tx {
     uint256 cum_sell;
