@@ -5,7 +5,7 @@ const time = require('./helper/timeshift');
 const BN = require('bn.js');
 require('chai').use(require('chai-bn')(BN)).should();
 
-const Token = artifacts.require("projectX");
+const Token = artifacts.require("Rewardeum");
 const routerContract = artifacts.require('IUniswapV2Router02');
 const pairContract = artifacts.require('IUniswapV2Pair');
 const IERC20 = artifacts.require('IERC20');

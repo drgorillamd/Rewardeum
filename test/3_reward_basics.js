@@ -1,5 +1,5 @@
 'use strict';
-const Token = artifacts.require("projectX");
+const Token = artifacts.require("Rewardeum");
 const truffleCost = require('truffle-cost');
 const truffleAssert = require('truffle-assertions');
 const routerContract = artifacts.require('IUniswapV2Router02');

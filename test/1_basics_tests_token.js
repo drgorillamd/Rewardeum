@@ -1,4 +1,4 @@
-const Token = artifacts.require("projectX");
+const Token = artifacts.require("Rewardeum");
 const truffleCost = require('truffle-cost');
 const truffleAssert = require('truffle-assertions');
 const BN = require('bn.js');
