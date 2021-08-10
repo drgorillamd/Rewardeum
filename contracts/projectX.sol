@@ -5,6 +5,7 @@ pragma solidity 0.8.0;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Router02.sol";
 import "@uniswap/v2-core/contracts/interfaces/IUniswapV2Factory.sol";
 import "@uniswap/v2-core/contracts/interfaces/IUniswapV2Pair.sol";
@@ -56,6 +57,7 @@ contract projectX is Ownable, IERC20 {
     uint8 public claim_ratio = 80;
     uint8 public spike_threshold = 120;
     uint8 public shock_absorber = 0;
+    uint8 public max_slippage = 84;
 
     uint32 public smart_pool_freq = 1 days;
 
@@ -505,9 +507,19 @@ contract projectX is Ownable, IERC20 {
         route[1] = dest_token;
 
         uint256 bal_before = IERC20(dest_token).balanceOf(receiver);
+        uint256 theo_amount_received;
+        try router.getAmountsOut(amount, route) returns (uint256[] memory out) {
+          theo_amount_received = out[0];
+        }
+        catch Error(string memory _err) {
+          revert(_err);
+        }
+
         try router.swapExactETHForTokensSupportingFeeOnTransferTokens{value: amount}(0, route, receiver, block.timestamp) {
           emit SwapForCustom("SwapForToken: success");
-          return IERC20(dest_token).balanceOf(receiver) - bal_before;
+          uint256 received = IERC20(dest_token).balanceOf(receiver) - bal_before;
+          require(received >= theo_amount_received * max_slippage / 100, "SwapForToken: max slippage");
+          return received;
         } catch Error(string memory _err) {
           emit SwapForCustom(_err);
           return 0;
@@ -532,6 +544,15 @@ contract projectX is Ownable, IERC20 {
       }
     }
 
+    function validateCustomTickers() external view returns (string memory) {
+      for(uint i = 0; i < tickers_claimable.length; i++) {
+        if(keccak256(abi.encodePacked(ERC20(available_tokens[tickers_claimable[i]]).symbol()))
+          != keccak256(abi.encodePacked(tickers_claimable[i])))
+          return(tickers_claimable[i]);
+      }
+      return "Validate: passed";
+    }
+
     //@dev taken from uniswapV2 TransferHelper lib
     function safeTransferETH(address to, uint value) internal {
         (bool success,) = to.call{value:value}(new bytes(0));
@@ -541,7 +562,7 @@ contract projectX is Ownable, IERC20 {
     //@dev fallback in order to receive BNB from swapToBNB
     receive () external payable {}
 
-    // ------------- Indiv addresses management -----------------
+// ------------- Indiv addresses management -----------------
 
     function excludeFromTaxes(address adr) external onlyOwner {
       require(!excluded[adr], "already excluded");
@@ -561,7 +582,13 @@ contract projectX is Ownable, IERC20 {
       return _last_tx[adr];
     }
 
-    // ---------- In case of emergency, break the glass -------------
+// ---------- In case of emergency, break the glass -------------
+
+    //@dev will bypass all the taxes and act as erc20.
+    //     pools & balancer balances will remain untouched
+    function setCircuitBreaker(bool status) external onlyOwner {
+      circuit_breaker = status;
+    }
 
     function forceSmartpoolCheck() external onlyOwner {
       smartPoolCheck();
@@ -583,7 +610,9 @@ contract projectX is Ownable, IERC20 {
       emit BalancerReset(balancer_balances.reward_pool, balancer_balances.liquidity_pool);
     }
 
-    //  --------------  setters ---------------------
+
+
+//  --------------  setters ---------------------
 
     function addClaimable(address new_token, string memory ticker) external onlyOwner {
       available_tokens[ticker] = new_token;
@@ -606,12 +635,6 @@ contract projectX is Ownable, IERC20 {
       tickers_claimable.pop();
 
       emit RemoveClaimableToken(ticker);
-    }
-
-    //@dev will bypass all the taxes and act as erc20.
-    //     pools & balancer balances will remain untouched
-    function setCircuitBreaker(bool status) external onlyOwner {
-      circuit_breaker = status;
     }
 
     //@dev default = burn
@@ -665,6 +688,10 @@ contract projectX is Ownable, IERC20 {
     
     function setRewardTaxesTranches(uint8 _pcs_pool_to_circ_ratio) external onlyOwner {
       pcs_pool_to_circ_ratio = _pcs_pool_to_circ_ratio;
+    }
+
+    function setMaxSlippage(uint8 new_max) external onlyOwner {
+      max_slippage = new_max;
     }
 
 }

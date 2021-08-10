@@ -81,25 +81,30 @@ contract("Reward Claim", accounts => {
     it("Claim 87000", async () => {
       const balance_before = new BN(await web3.eth.getBalance(anon));
       await time.advanceTimeAndBlock(87000);
-      await truffleCost.log(x.claimReward(WETH, {from: anon}));
+      await truffleCost.log(x.claimReward('WBNB', {from: anon}));
       const balance_after = new BN(await web3.eth.getBalance(anon));
       balance_after.should.be.a.bignumber.that.is.greaterThan(balance_before);
     });
 
     it("Double claim: revert", async () => { //
       const balance_before = await web3.eth.getBalance(x.address);
-      await truffleAssert.reverts(x.claimReward(WETH, {from: anon}), "Claim: 0");
+      await truffleAssert.reverts(x.claimReward('WBNB', {from: anon}), "Claim: 0");
     });
 
   });
 
-  describe("Claim BUSD", () => {
+  describe("Custom claim", () => {
     it("Claim BUSD after 87000", async () => { //indirect measure via contract balance (accounts[1] pay gas)
       const balance_before = await IBUSD.balanceOf(anon);
       await time.advanceTimeAndBlock(87000);
-      await truffleCost.log(x.claimReward(BUSD, {from: anon}));
+      await truffleCost.log(x.claimReward('BUSD', {from: anon}));
       const balance_after = await IBUSD.balanceOf(anon);
       balance_after.should.be.a.bignumber.greaterThan(balance_before);
     });
+
+    it("Validate tickers", async () => {
+      const res = await x.validateCustomTickers.call();
+      assert.equal(res, "Validate: passed");
+    })
   });
 });
