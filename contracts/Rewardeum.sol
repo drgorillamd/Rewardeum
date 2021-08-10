@@ -626,7 +626,6 @@ contract Rewardeum is Ownable, IERC20 {
 
   function removeClaimable(string memory ticker) external onlyOwner {
     delete available_tokens[ticker];
-
     delete custom_claimed[ticker];
 
     string[] memory _tickers_claimable = tickers_claimable;
