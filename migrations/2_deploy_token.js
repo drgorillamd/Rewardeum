@@ -8,7 +8,7 @@ module.exports = function(deployer, network) {
   if (network=="testnet") {
     deployer.deploy(Rewardeum, BSC_test_routeur);
   }
-  else if (network=="bsc" || network=="ganache") {
+  else if (network=="bsc") {
     deployer.deploy(Rewardeum, BSC_mainnet_routeur);
   }
 

@@ -45,28 +45,36 @@ contract Rewardeum is Ownable, IERC20 {
   mapping (address => past_tx) private _last_tx;
   mapping (address => mapping (address => uint256)) private _allowances;
   mapping (address => bool) private excluded;
+  
+// ---- custom claim ----
   mapping (string => address) public available_tokens;
   mapping (string => uint256) public custom_claimed;
+  mapping (string => address) public combined_offer;
 
-  uint8 private _decimals = 9;
-  uint8 public pcs_pool_to_circ_ratio = 10;
-  uint8 public excess_rate = 200;
-  uint8 public minor_fill = 5;
-  uint8 public resplenish_factor = 100;
-  uint8 public claim_ratio = 80;
-  uint8 public spike_threshold = 120;
-  uint8 public shock_absorber = 0;
-  uint8 public max_slippage = 84;
+// ---- tokenomic ----
+  uint private _decimals = 9;
+  uint private _totalSupply = 10**15 * 10**_decimals;
 
-  uint32 public smart_pool_freq = 1 days;
+// ---- balancer ----
+  uint public pcs_pool_to_circ_ratio = 10;
+  uint public swap_for_liquidity_threshold = 10**13 * 10**_decimals; //1%
+  uint public swap_for_reward_threshold = 10**13 * 10**_decimals;
+  uint public swap_for_reserve_threshold = 10**13 * 10**_decimals;
 
-  uint256 private _totalSupply = 10**15 * 10**_decimals;
-  uint256 public swap_for_liquidity_threshold = 10**13 * 10**_decimals; //1%
-  uint256 public swap_for_reward_threshold = 10**13 * 10**_decimals;
-  uint256 public swap_for_reserve_threshold = 10**13 * 10**_decimals;
-  uint256 public last_smartpool_check;
-  uint256 public gas_flat_fee = 0.0028 ether;
-  uint256 public total_claimed;
+// ---- smartpool ----
+  uint public last_smartpool_check;
+  uint public smart_pool_freq = 1 days;
+  uint public excess_rate = 200;
+  uint public minor_fill = 5;
+  uint public resplenish_factor = 100;
+  uint public spike_threshold = 120;
+  uint public shock_absorber = 0;
+
+// ---- claim ----
+  uint public claim_ratio = 80;
+  uint public max_slippage = 84;
+  uint public gas_flat_fee = 0.0028 ether;
+  uint public total_claimed;
   
 
   uint8[4] public selling_taxes_rates = [2, 5, 10, 20];
@@ -81,6 +89,7 @@ contract Rewardeum is Ownable, IERC20 {
   string private _name = "Rewardeum";
   string private _symbol = "REUM";
   string[] public tickers_claimable;
+  string[] public current_offers;
 
   address public LP_recipient;
   address public devWallet;
@@ -438,7 +447,7 @@ contract Rewardeum is Ownable, IERC20 {
     if(dest_token == WETH) safeTransferETH(msg.sender, claimable);
     else if(dest_token == address(main_vault)) {
       main_vault.claim(ticker, msg.sender); //multiple bonuses -> same vault address, key passed to get the correct one in vault contract
-      //safeTransferETH(address(main_vault), claimable);
+      if(combined_offer[ticker] != address(0)) swapForCustom(claimable, msg.sender, combined_offer[ticker]);
     }
     else swapForCustom(claimable, msg.sender, dest_token);
 
@@ -636,8 +645,25 @@ contract Rewardeum is Ownable, IERC20 {
       }
     }
     tickers_claimable.pop();
-
     emit RemoveClaimableToken(ticker);
+  }
+
+  function addCombinedOffer(address new_token, string memory ticker) external onlyOwner {
+    combined_offer[ticker] = new_token;
+    current_offers.push(ticker);
+  }
+
+  function removeCombinedOffer(string memory ticker) external onlyOwner {
+    delete combined_offer[ticker];
+
+    string[] memory _current_offers = current_offers;
+    for(uint i=0; i<_current_offers.length; i++) {
+      if(keccak256(abi.encodePacked(_current_offers[i])) == keccak256(abi.encodePacked(ticker))) {
+        current_offers[i] = _current_offers[current_offers.length - 1];
+        break;
+      }
+    }
+    current_offers.pop();
   }
 
   //@dev default = burn
