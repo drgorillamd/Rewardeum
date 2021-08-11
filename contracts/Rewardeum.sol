@@ -96,7 +96,7 @@ contract Rewardeum is Ownable, IERC20 {
   address public mktWallet;
   address public WETH;
 
-  IVault main_vault;
+  IVault public main_vault;
   IUniswapV2Pair public pair;
   IUniswapV2Router02 public router;
 
@@ -225,7 +225,7 @@ contract Rewardeum is Ownable, IERC20 {
       uint256 contribution;
       
 
-      if(excluded[sender] == false && excluded[recipient] == false && circuit_breaker == false) {
+      if(!inClaim && excluded[sender] == false && excluded[recipient] == false && circuit_breaker == false) {
       
         (uint112 _reserve0, uint112 _reserve1,) = pair.getReserves(); // returns reserve0, reserve1, timestamp last tx
         if(address(this) != pair.token0()) { // 0 := iBNB
@@ -445,10 +445,13 @@ contract Rewardeum is Ownable, IERC20 {
     if(last_smartpool_check < block.timestamp + smart_pool_freq) smartPoolCheck();
 
     if(dest_token == WETH) safeTransferETH(msg.sender, claimable);
+
     else if(dest_token == address(main_vault)) {
-      main_vault.claim(ticker, msg.sender); //multiple bonuses -> same vault address, key passed to get the correct one in vault contract
+      bool success = main_vault.claim(ticker, msg.sender); //multiple bonuses -> same vault address, key passed to get the correct one in vault contract
+      require(success, "vault error");
       if(combined_offer[ticker] != address(0)) swapForCustom(claimable, msg.sender, combined_offer[ticker]);
     }
+
     else swapForCustom(claimable, msg.sender, dest_token);
 
     custom_claimed[ticker]++;
@@ -517,7 +520,7 @@ contract Rewardeum is Ownable, IERC20 {
       uint256 bal_before = IERC20(dest_token).balanceOf(receiver);
       uint256 theo_amount_received;
       try router.getAmountsOut(amount, route) returns (uint256[] memory out) {
-        theo_amount_received = out[0];
+        theo_amount_received = out[1];
       }
       catch Error(string memory _err) {
         revert(_err);
@@ -537,7 +540,8 @@ contract Rewardeum is Ownable, IERC20 {
 
   function getQuote(uint256 amount, string calldata ticker) external view returns (uint256) {
     address wbnb = WETH;
-    address dest_token = available_tokens[ticker];
+    //if non-combined offer, no quote to get -> will fail
+    address dest_token = available_tokens[ticker] == address(main_vault) ? combined_offer[ticker] : available_tokens[ticker];
     if(available_tokens[ticker] == address(0)) return 0;
     if(keccak256(abi.encodePacked(ticker)) == keccak256(abi.encodePacked("WBNB"))) return amount;
 

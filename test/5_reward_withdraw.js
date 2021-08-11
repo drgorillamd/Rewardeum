@@ -78,7 +78,7 @@ contract("Reward Claim", accounts => {
 
   describe("Claim", () => {
 
-    it("Claim 87000", async () => {
+    it("Claim BNB at 87000 sec", async () => {
       const balance_before = new BN(await web3.eth.getBalance(anon));
       await time.advanceTimeAndBlock(87000);
       await truffleCost.log(x.claimReward('WBNB', {from: anon}));
@@ -93,12 +93,42 @@ contract("Reward Claim", accounts => {
 
   });
 
+  describe("Claim", () => {
+
+    it("Buy from anon", async () => {
+      const route_buy = [await router.WETH(), x.address]
+      const val_bnb = '1'+'0'.repeat(19);
+      const res = await router.swapExactETHForTokensSupportingFeeOnTransferTokens(0, route_buy, anon, 1907352278, {from: anon, value: val_bnb});
+      const init_token = await x.balanceOf.call(anon);
+      init_token.should.be.a.bignumber.that.is.not.null;
+    });
+
+    it("Gas Waiver test", async () => {
+ 
+    });
+
+    it("Double claim: revert", async () => { //
+      const balance_before = await web3.eth.getBalance(x.address);
+      await truffleAssert.reverts(x.claimReward('WBNB', {from: anon}), "Claim: 0");
+    });
+
+  });
+
+
   describe("Custom claim", () => {
-    it("Claim BUSD after 87000", async () => { //indirect measure via contract balance (accounts[1] pay gas)
+    it("Claim BUSD after 87000", async () => { 
       const balance_before = await IBUSD.balanceOf(anon);
       await time.advanceTimeAndBlock(87000);
       await truffleCost.log(x.claimReward('BUSD', {from: anon}));
       const balance_after = await IBUSD.balanceOf(anon);
+      balance_after.should.be.a.bignumber.greaterThan(balance_before);
+    });
+
+    it("Claim REUM after 87000", async () => { 
+      const balance_before = await x.balanceOf.call(anon);
+      await time.advanceTimeAndBlock(87000);
+      await truffleCost.log(x.claimReward('REUM', {from: anon}));
+      const balance_after = await x.balanceOf.call(anon);
       balance_after.should.be.a.bignumber.greaterThan(balance_before);
     });
 

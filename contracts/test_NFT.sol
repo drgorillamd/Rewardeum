@@ -9,7 +9,7 @@ contract vault_test_NFT is ERC721 {
     uint256 MAX_ID = 15;
     using Counters for Counters.Counter;
     Counters.Counter private _tokenIds;
-    constructor() ERC721("Vault_test", "TEST") {
+    constructor() ERC721("Vault_test", "NFT_TEST") {
     	for (uint i = 1; i<=MAX_ID; i++) {
     		_tokenIds.increment();
         	_mint(msg.sender, _tokenIds.current());
