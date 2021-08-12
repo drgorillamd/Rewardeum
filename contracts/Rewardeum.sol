@@ -50,6 +50,7 @@ contract Rewardeum is Ownable, IERC20 {
   mapping (string => address) public available_tokens;
   mapping (string => uint256) public custom_claimed;
   mapping (string => address) public combined_offer;
+  mapping (address => uint256) public min_received;
 
 // ---- tokenomic ----
   uint private _decimals = 9;
@@ -72,7 +73,6 @@ contract Rewardeum is Ownable, IERC20 {
 
 // ---- claim ----
   uint public claim_ratio = 80;
-  uint public max_slippage = 84;
   uint public gas_flat_fee = 0.0028 ether;
   uint public total_claimed;
   
@@ -144,22 +144,28 @@ contract Rewardeum is Ownable, IERC20 {
     circuit_breaker = true; //ERC20 behavior by default/presale
 
     available_tokens["REUM"] = address(this);
-    available_tokens["WBNB"] = WETH;
-    available_tokens["BTCB"] = address(0x7130d2A12B9BCbFAe4f2634d864A1Ee1Ce3Ead9c);
-    available_tokens["ETH"] = address(0x2170Ed0880ac9A755fd29B2688956BD959F933F8);
-    available_tokens["BUSD"] = address(0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56);
-    available_tokens["USDT"] = address(0x55d398326f99059fF775485246999027B3197955);
-    available_tokens["ADA"] = address(0x3EE2200Efb3400fAbB9AacF31297cBdD1d435D47);
-    available_tokens["MATIC"] = address(0xCC42724C6683B7E57334c4E856f4c9965ED682bD);
-    
+    min_received[address(this)] = 83;
     tickers_claimable.push("REUM");
+
+    available_tokens["WBNB"] = WETH;
+    min_received[WETH] = 95;
     tickers_claimable.push("WBNB");
+
+    available_tokens["BTCB"] = address(0x7130d2A12B9BCbFAe4f2634d864A1Ee1Ce3Ead9c);
+    min_received[address(0x7130d2A12B9BCbFAe4f2634d864A1Ee1Ce3Ead9c)] = 95;
     tickers_claimable.push("BTCB");
+
+    available_tokens["ETH"] = address(0x2170Ed0880ac9A755fd29B2688956BD959F933F8);
+    min_received[address(0x2170Ed0880ac9A755fd29B2688956BD959F933F8)] = 95;
     tickers_claimable.push("ETH");
+
+    available_tokens["BUSD"] = address(0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56);
+    min_received[address(0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56)] = 95;
     tickers_claimable.push("BUSD");
+
+    available_tokens["USDT"] = address(0x55d398326f99059fF775485246999027B3197955);
+    min_received[address(0x55d398326f99059fF775485246999027B3197955)] = 95;
     tickers_claimable.push("USDT");
-    tickers_claimable.push("ADA");
-    tickers_claimable.push("MATIC");
 
     _balances[msg.sender] = _totalSupply;
     emit Transfer(address(0), msg.sender, _totalSupply);
@@ -498,14 +504,25 @@ contract Rewardeum is Ownable, IERC20 {
   function swapForBNB(uint256 token_amount, address receiver) internal inSwap returns (uint256) {
     address[] memory route = new address[](2);
     route[0] = address(this);
-    route[1] = router.WETH();
+    route[1] = WETH;
 
     if(allowance(address(this), address(router)) < token_amount) {
       _allowances[address(this)][address(router)] = ~uint256(0);
       emit Approval(address(this), address(router), ~uint256(0));
     }
 
-    try router.swapExactTokensForETHSupportingFeeOnTransferTokens(token_amount, 0, route, receiver, block.timestamp) {
+    uint256 bal_before = receiver.balance;
+    uint256 theo_amount_received;
+    try router.getAmountsOut(token_amount, route) returns (uint256[] memory out) {
+      theo_amount_received = out[1];
+    }
+    catch Error(string memory _err) {
+      revert(_err);
+    }
+
+    uint256 min_to_receive = theo_amount_received * min_received[route[1]] / 100;
+
+    try router.swapExactTokensForETHSupportingFeeOnTransferTokens(token_amount, min_to_receive, route, receiver, block.timestamp) {
       emit SwapForBNB("Swap success");
       return token_amount;
     }
@@ -514,7 +531,7 @@ contract Rewardeum is Ownable, IERC20 {
       return 0;
     }
   }
-  //TODO: get quote and max slippage !!!
+
   function swapForCustom(uint256 amount, address receiver, address dest_token) internal inSwap returns (uint256) {
     address wbnb = WETH;
 
@@ -534,10 +551,11 @@ contract Rewardeum is Ownable, IERC20 {
         revert(_err);
       }
 
-      try router.swapExactETHForTokensSupportingFeeOnTransferTokens{value: amount}(0, route, receiver, block.timestamp) {
+      uint256 min_to_receive = theo_amount_received * min_received[dest_token] / 100;
+
+      try router.swapExactETHForTokensSupportingFeeOnTransferTokens{value: amount}(min_to_receive, route, receiver, block.timestamp) {
         emit SwapForCustom("SwapForToken: success");
         uint256 received = IERC20(dest_token).balanceOf(receiver) - bal_before;
-        require(received >= theo_amount_received * max_slippage / 100, "SwapForToken: max slippage");
         return received;
       } catch Error(string memory _err) {
         emit SwapForCustom(_err);
@@ -639,9 +657,10 @@ contract Rewardeum is Ownable, IERC20 {
     main_vault = IVault(new_vault);
   }
 
-  function addClaimable(address new_token, string memory ticker) external onlyOwner {
+  function addClaimable(address new_token, string memory ticker, uint256 _min_received_percents) external onlyOwner {
     available_tokens[ticker] = new_token;
     tickers_claimable.push(ticker);
+    min_received[new_token] = _min_received_percents;
     emit AddClaimableToken(ticker, new_token);
   }
 
@@ -731,8 +750,8 @@ contract Rewardeum is Ownable, IERC20 {
     pcs_pool_to_circ_ratio = _pcs_pool_to_circ_ratio;
   }
 
-  function setMaxSlippage(uint8 new_max) external onlyOwner {
-    max_slippage = new_max;
+  function setMaxSlippage(address token, uint256 new_max) external onlyOwner {
+    min_received[token] = new_max;
   }
 
 }

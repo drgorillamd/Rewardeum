@@ -107,7 +107,7 @@ contract("Smartpool", accounts => {
       console.log("claimable : " + claimable[0]);
       let ticker;
       let res;
-      for(let i=0; i<7; i++){
+      for(let i=0; i<6; i++){
         ticker = await x.tickers_claimable.call(i);
         res = await x.getQuote.call(claimable[0], ticker)
         console.log(ticker+" : "+res.toString());

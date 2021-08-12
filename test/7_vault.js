@@ -108,7 +108,7 @@ contract("Vault.sol", accounts => {
 
   describe("Adding bonus to claim", () => {
     it("Adding reum in bonus list", async () => {
-      await x.addClaimable(v.address, "REUM", {from: accounts[0]});
+      await x.addClaimable(v.address, "REUM", 85, {from: accounts[0]});
       await x.addCombinedOffer(x.address, "REUM", {from: accounts[0]});
       const new_adr = await x.available_tokens.call("REUM");
       const new_combined = await x.combined_offer.call("REUM");
@@ -117,7 +117,7 @@ contract("Vault.sol", accounts => {
     })
 
     it("Adding NFT_TEST in bonus list", async () => {
-      await x.addClaimable(v.address, "NFT_TEST", {from: accounts[0]});
+      await x.addClaimable(v.address, "NFT_TEST", 0, {from: accounts[0]});
       const new_adr = await x.available_tokens.call("NFT_TEST");
       assert.equal(new_adr, v.address);
     })
