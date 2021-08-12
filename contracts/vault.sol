@@ -17,7 +17,7 @@ contract Vault is Ownable, ERC721Holder {
         main_contract = reum;
     }
 
-    function claim(string memory ticker, address dest) external returns (bool) {
+    function claim(uint256 claimable,  address dest, string memory ticker) external returns (bool) {
         require(msg.sender == main_contract, "Vault: unauthorized access");
 
         if(keccak256(abi.encodePacked(ticker)) == keccak256(abi.encodePacked("REUM"))) {

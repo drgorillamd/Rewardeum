@@ -54,9 +54,6 @@ contract("LP and taxes", accounts => {
     });
   });
 
-
-  //[ 0          2,       4,       6,        8        revert]    Sell tax(%)
-  //[   0.0125,     250,     500,      750,     1000]	    	     Tranche(% of pool bal)
   describe("Regular transfers", () => {
 
     it("Transfer standard: single -- 1m : 17% + triggers LP", async () => {

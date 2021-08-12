@@ -20,7 +20,7 @@ let WETH;
 let IBUSD;
 
 
-contract("LP and taxes", accounts => {
+contract("Vault.sol", accounts => {
 
   const amount_BNB = 98 * 10**18;
   const pool_balance = '98' + '0'.repeat(19);
@@ -127,24 +127,23 @@ contract("LP and taxes", accounts => {
 
     it("claim directly from vault -> revert ?", async () => {
       await time.advanceTimeAndBlock(87000);
-      await truffleAssert.reverts(v.claim('REUM', anon, {from: anon}), "Vault: unauthorized access");
+      await truffleAssert.reverts(v.claim('10000', anon, 'REUM', {from: anon}), "Vault: unauthorized access");
     })
 
-    it("Claiming Reum - check events", async () => {
+    it("Claiming Reum", async () => {
       await time.advanceTimeAndBlock(87000);
       const claimable_reward = await x.computeReward.call({from: anon});
+      console.log("claimable : "+claimable_reward[0]);
+
+      //gas waiver!
+      //const get_taxOnClaim = ( ((claimable_reward[0].pow(new BN('2'))).mul(new BN('2'))).add(claimable_reward[0].mul(new BN('3'))) ).divn(new BN('100'));
+
       const get_quote = await x.getQuote.call(claimable_reward[0], "REUM");
       const bal_before = await x.balanceOf.call(anon);
       const vault_bal = await x.balanceOf.call(v.address);
       await truffleCost.log(x.claimReward("REUM", {from: anon}));
       const bal_after = await x.balanceOf.call(anon);
-
-
-      console.log(claimable_reward[0].toString());
-      console.log(bal_before.toString());
-      console.log(bal_after.toString());
-
-      assert.equal(bal_after, bal_before.add(vault_bal).add(get_quote), "incorrect reward");
+      bal_after.should.be.a.bignumber.that.is.closeTo(bal_before.add(vault_bal).add(get_quote), '1000000');
     })
 
     it("Claim NFT_TEST", async () => {

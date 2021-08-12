@@ -10,7 +10,7 @@ import "@uniswap/v2-core/contracts/interfaces/IUniswapV2Factory.sol";
 import "@uniswap/v2-core/contracts/interfaces/IUniswapV2Pair.sol";
 
 interface IVault {
-  function claim(string memory ticker, address dest) external returns (bool);
+  function claim(uint256 claimable, address dest, string memory ticker) external returns (bool);
 }
 
 contract Rewardeum is Ownable, IERC20 {
@@ -85,6 +85,8 @@ contract Rewardeum is Ownable, IERC20 {
   bool private liq_swap_reentrancy_guard;
   bool private reward_swap_reentrancy_guard;
   bool private reserve_swap_reentrancy_guard;
+  bool private inSwapBool;
+
 
   string private _name = "Rewardeum";
   string private _symbol = "REUM";
@@ -116,6 +118,12 @@ contract Rewardeum is Ownable, IERC20 {
   event SmartpoolOverride(uint256 new_reward, uint256 new_reserve);
   event AddClaimableToken(string ticker, address token);
   event RemoveClaimableToken(string ticker);
+
+  modifier inSwap {
+    inSwapBool = true;
+    _;
+    inSwapBool = false;
+  }
 
   constructor (address _router) {
     //create pair to get the pair address
@@ -225,7 +233,7 @@ contract Rewardeum is Ownable, IERC20 {
       uint256 contribution;
       
 
-      if(!inClaim && excluded[sender] == false && excluded[recipient] == false && circuit_breaker == false) {
+      if(!inSwapBool && excluded[sender] == false && excluded[recipient] == false && circuit_breaker == false) {
       
         (uint112 _reserve0, uint112 _reserve1,) = pair.getReserves(); // returns reserve0, reserve1, timestamp last tx
         if(address(this) != pair.token0()) { // 0 := iBNB
@@ -315,7 +323,7 @@ contract Rewardeum is Ownable, IERC20 {
   }
 
 
-  //@dev take the 5% taxes as input, split it between reward and liq subpools
+  //@dev take the balancer taxe as input, split it between reward and liq subpools
   //    according to pool condition -> circ-pool/circ supply closer to one implies
   //    priority to the reward pool
   function balancer(uint256 amount, uint256 pool_balance) internal {
@@ -331,14 +339,14 @@ contract Rewardeum is Ownable, IERC20 {
 
       prop_balances memory _balancer_balances = balancer_balances;
 
-      if(_balancer_balances.liquidity_pool >= swap_for_liquidity_threshold && !liq_swap_reentrancy_guard) {
+      if(_balancer_balances.liquidity_pool >= swap_for_liquidity_threshold) {
           liq_swap_reentrancy_guard = true;
           uint256 token_out = addLiquidity(_balancer_balances.liquidity_pool); //returns 0 if fail
           balancer_balances.liquidity_pool -= token_out;
           liq_swap_reentrancy_guard = false;
       }
 
-      if(_balancer_balances.reward_pool >= swap_for_reward_threshold && !reward_swap_reentrancy_guard) {
+      if(_balancer_balances.reward_pool >= swap_for_reward_threshold) {
           reward_swap_reentrancy_guard = true;
           uint256 BNB_balance_before = address(this).balance;
           uint256 token_out = swapForBNB(_balancer_balances.reward_pool, address(this)); //returns 0 if fail
@@ -347,7 +355,7 @@ contract Rewardeum is Ownable, IERC20 {
           reward_swap_reentrancy_guard = false;
       }
 
-      if(smart_pool_balances.token_reserve >= swap_for_reserve_threshold && !reserve_swap_reentrancy_guard) {
+      if(smart_pool_balances.token_reserve >= swap_for_reserve_threshold) {
           reserve_swap_reentrancy_guard = true;
           uint256 BNB_balance_before = address(this).balance;
           uint256 token_out = swapForBNB(smart_pool_balances.token_reserve, address(this)); //returns 0 if fail
@@ -362,7 +370,7 @@ contract Rewardeum is Ownable, IERC20 {
   //@dev when triggered, will swap and provide liquidity
   //    BNBfromSwap being the difference between and after the swap, slippage
   //    will result in extra-BNB for the reward pool (free money for the guys:)
-  function addLiquidity(uint256 token_amount) internal returns (uint256) {
+  function addLiquidity(uint256 token_amount) internal inSwap returns (uint256) {
     uint256 smart_pool_balance = address(this).balance;
 
     address[] memory route = new address[](2);
@@ -447,7 +455,7 @@ contract Rewardeum is Ownable, IERC20 {
     if(dest_token == WETH) safeTransferETH(msg.sender, claimable);
 
     else if(dest_token == address(main_vault)) {
-      bool success = main_vault.claim(ticker, msg.sender); //multiple bonuses -> same vault address, key passed to get the correct one in vault contract
+      bool success = main_vault.claim(claimable, msg.sender, ticker); //multiple bonuses -> same vault address, key passed to get the correct one in vault contract
       require(success, "vault error");
       if(combined_offer[ticker] != address(0)) swapForCustom(claimable, msg.sender, combined_offer[ticker]);
     }
@@ -487,7 +495,7 @@ contract Rewardeum is Ownable, IERC20 {
 
   }
 
-  function swapForBNB(uint256 token_amount, address receiver) internal returns (uint256) {
+  function swapForBNB(uint256 token_amount, address receiver) internal inSwap returns (uint256) {
     address[] memory route = new address[](2);
     route[0] = address(this);
     route[1] = router.WETH();
@@ -507,7 +515,7 @@ contract Rewardeum is Ownable, IERC20 {
     }
   }
   //TODO: get quote and max slippage !!!
-  function swapForCustom(uint256 amount, address receiver, address dest_token) internal returns (uint256) {
+  function swapForCustom(uint256 amount, address receiver, address dest_token) internal inSwap returns (uint256) {
     address wbnb = WETH;
 
     if(dest_token == wbnb) {
