@@ -6,7 +6,7 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
 
-contract iBNB_airdrop is Ownable {
+contract Reum_airdrop is Ownable {
 
     IERC20 token_interface;
     uint256 init_balance;

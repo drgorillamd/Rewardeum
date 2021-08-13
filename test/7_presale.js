@@ -96,7 +96,7 @@ contract("Presale-contract", accounts => {
 
     describe("closing sale", () => {
 
-        it("Liquidity + closing", async () => {
+        it("Liquidity + closing + transfer to reward", async () => {
             const t = await Token.deployed();
             const sale = await Presale.deployed();
             await truffleCost.log(sale.concludeAndAddLiquidity(50, {from:deployer})); 
