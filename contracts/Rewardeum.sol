@@ -66,20 +66,20 @@ contract Rewardeum is Ownable, IERC20 {
   uint public last_smartpool_check;
   uint public smart_pool_freq = 1 days;
   uint public excess_rate = 200;
-  uint public minor_fill = 5;
+  uint public minor_fill = 2;
   uint public resplenish_factor = 100;
   uint public spike_threshold = 120;
   uint public shock_absorber = 0;
 
 // ---- claim ----
   uint public claim_ratio = 80;
-  uint public gas_flat_fee = 0.0028 ether;
+  uint public gas_flat_fee = 0.000361 ether;
   uint public total_claimed;
   
 
   uint8[4] public selling_taxes_rates = [2, 5, 10, 20];
   uint16[3] public selling_taxes_tranches = [200, 500, 1000]; // % and div by 10000 0.012% -0.025% -(...)
-  uint128[2] public gas_waiver_limits = [0.0004 ether, 0.004 ether];
+  uint128[2] public gas_waiver_limits = [0.0001 ether, 0.0005 ether];
 
   bool public circuit_breaker;
   bool private liq_swap_reentrancy_guard;
