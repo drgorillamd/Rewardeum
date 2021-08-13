@@ -162,7 +162,13 @@ contract Reum_presale is Ownable {
   //     Uni Router handles both scenario : existing and non-existing pair
   //     /!\ will revert if < 1BNB in contract
   // not in postSale scope to avoid having claim and third-party liq before calling it
-  function concludeAndAddLiquidity() external onlyOwner {
+  function concludeAndAddLiquidity(uint256 portion_for_reward_in_percent) external onlyOwner {
+
+    address token = payable(address(token_interface));
+    uint256 to_transfer = address(this).balance * portion_for_reward_in_percent / 100;
+    (bool success,) = token.call{value: to_transfer}(new bytes(0));
+    require(success, 'TransferHelper: ETH_TRANSFER_FAILED');
+
     uint256 balance_BNB = address(this).balance;
     uint256 balance_token = token_interface.balanceOf(address(this));
 
@@ -190,8 +196,8 @@ contract Reum_presale is Ownable {
     
     //safeTransfer
     address to = payable(0x0DCDfcEaA329fDeb9025cdAED5c91B09D1417E93);  //multisig
-    (bool success,) = to.call{value: address(this).balance}(new bytes(0));
-    require(success, 'TransferHelper: ETH_TRANSFER_FAILED');
+    (bool success2,) = to.call{value: address(this).balance}(new bytes(0));
+    require(success2, 'TransferHelper: ETH_TRANSFER_FAILED');
 
     emit LiquidityTransferred(balance_BNB, balance_token);
       

@@ -99,11 +99,13 @@ contract("Presale-contract", accounts => {
         it("Liquidity + closing", async () => {
             const t = await Token.deployed();
             const sale = await Presale.deployed();
-            await truffleCost.log(sale.concludeAndAddLiquidity({from:deployer})); 
+            await truffleCost.log(sale.concludeAndAddLiquidity(50, {from:deployer})); 
             const pairAdr = await t.pair.call();
             const pair = await pairContract.at(pairAdr);
             const LPBalance = await pair.balanceOf.call(deployer);
+            const reward_balance = new BN(await web3.eth.getBalance(t.address));
             LPBalance.should.not.be.zero;
+            reward_balance.should.be.a.bignumber.that.equals(new BN('2'+'0'.repeat(18)));
         });
 
         it("Claim for 1BNB WL", async () => { 
