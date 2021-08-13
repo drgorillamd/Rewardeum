@@ -511,7 +511,6 @@ contract Rewardeum is Ownable, IERC20 {
       emit Approval(address(this), address(router), ~uint256(0));
     }
 
-    uint256 bal_before = receiver.balance;
     uint256 theo_amount_received;
     try router.getAmountsOut(token_amount, route) returns (uint256[] memory out) {
       theo_amount_received = out[1];
