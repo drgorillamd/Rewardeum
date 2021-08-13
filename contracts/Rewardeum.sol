@@ -143,6 +143,7 @@ contract Rewardeum is Ownable, IERC20 {
 
     circuit_breaker = true; //ERC20 behavior by default/presale
 
+// -- standard --
     available_tokens["REUM"] = address(this);
     min_received[address(this)] = 83;
     tickers_claimable.push("REUM");
@@ -166,6 +167,28 @@ contract Rewardeum is Ownable, IERC20 {
     available_tokens["USDT"] = address(0x55d398326f99059fF775485246999027B3197955);
     min_received[address(0x55d398326f99059fF775485246999027B3197955)] = 95;
     tickers_claimable.push("USDT");
+
+// -- limited offer at launch --
+    available_tokens["ADA"] = address(0x3EE2200Efb3400fAbB9AacF31297cBdD1d435D47);
+    min_received[address(0x3EE2200Efb3400fAbB9AacF31297cBdD1d435D47)] = 95;
+    tickers_claimable.push("ADA");
+
+    available_tokens["CAKE"] = address(0x0E09FaBB73Bd3Ade0a17ECC321fD13a19e81cE82);
+    min_received[address(0x0E09FaBB73Bd3Ade0a17ECC321fD13a19e81cE82)] = 95;
+    tickers_claimable.push("CAKE");
+
+    available_tokens["XRP"] = address(0x1D2F0da169ceB9fC7B3144628dB156f3F6c60dBE);
+    min_received[address(0x1D2F0da169ceB9fC7B3144628dB156f3F6c60dBE)] = 95;
+    tickers_claimable.push("XRP");
+
+    available_tokens["DOT"] = address(0x7083609fCE4d1d8Dc0C979AAb8c869Ea2C873402);
+    min_received[address(0x7083609fCE4d1d8Dc0C979AAb8c869Ea2C873402)] = 95;
+    tickers_claimable.push("DOT");
+
+    available_tokens["DOGE"] = address(0xbA2aE424d960c26247Dd6c32edC70B295c744C43);
+    min_received[address(0xbA2aE424d960c26247Dd6c32edC70B295c744C43)] = 95;
+    tickers_claimable.push("DOGE");
+
 
     _balances[msg.sender] = _totalSupply;
     emit Transfer(address(0), msg.sender, _totalSupply);
