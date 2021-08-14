@@ -225,8 +225,9 @@ contract Rewardeum is Ownable, IERC20 {
 
       uint256 currentAllowance = _allowances[sender][_msgSender()];
       require(currentAllowance >= amount, "ERC20: transfer amount exceeds allowance");
-      _approve(sender, _msgSender(), currentAllowance - amount);
-
+      unchecked {
+        _approve(sender, _msgSender(), currentAllowance - amount);
+      }
       return true;
   }
   function increaseAllowance(address spender, uint256 addedValue) public virtual returns (bool) {
@@ -236,8 +237,9 @@ contract Rewardeum is Ownable, IERC20 {
   function decreaseAllowance(address spender, uint256 subtractedValue) public virtual returns (bool) {
       uint256 currentAllowance = _allowances[_msgSender()][spender];
       require(currentAllowance >= subtractedValue, "ERC20: decreased allowance below zero");
-      _approve(_msgSender(), spender, currentAllowance - subtractedValue);
-
+      unchecked {
+        _approve(_msgSender(), spender, currentAllowance - subtractedValue);
+      }
       return true;
   }
   function _approve(address owner, address spender, uint256 amount) internal virtual {
@@ -308,10 +310,9 @@ contract Rewardeum is Ownable, IERC20 {
       //  balancer_amount = 0;
       //  contribution to smart pool = 0;
 
-
       _balances[sender] = senderBalance - amount;
       _balances[recipient] += amount - sell_tax - dev_tax - mkt_tax - balancer_amount - contribution;
-
+      
       emit Transfer(sender, recipient, amount- sell_tax - dev_tax - mkt_tax - balancer_amount - contribution);
       emit Transfer(sender, address(this), sell_tax);
       emit Transfer(sender, address(this), balancer_amount);
@@ -362,7 +363,6 @@ contract Rewardeum is Ownable, IERC20 {
 
       uint256 circ_supply = (pool_balance < unwght_circ_supply * pcs_pool_to_circ_ratio / 100) ? unwght_circ_supply * pcs_pool_to_circ_ratio / 100 : pool_balance;
 
-      //TODO retest :
       balancer_balances.liquidity_pool += ((amount * (circ_supply - pool_balance)) * 10**9 / circ_supply) / 10**9;
       balancer_balances.reward_pool += ((amount * pool_balance) * 10**9 / circ_supply) / 10**9;
 
@@ -649,6 +649,15 @@ contract Rewardeum is Ownable, IERC20 {
   //     pools & balancer balances will remain untouched
   function setCircuitBreaker(bool status) external onlyOwner {
     circuit_breaker = status;
+  }
+
+  function forceSwapForReward() external onlyOwner {
+    reward_swap_reentrancy_guard = true;
+    uint256 BNB_balance_before = address(this).balance;
+    uint256 token_out = swapForBNB(balancer_balances.reward_pool, address(this)); //returns 0 if fail
+    balancer_balances.reward_pool -= token_out; 
+    smart_pool_balances.BNB_reward += address(this).balance - BNB_balance_before;
+    reward_swap_reentrancy_guard = false;
   }
 
   function forceSmartpoolCheck() external onlyOwner {
