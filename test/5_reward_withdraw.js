@@ -68,8 +68,8 @@ contract("Reward Claim", accounts => {
 
     it("smartpool Override", async () => {
       const _BNB_bal = new BN(await web3.eth.getBalance(x.address));
-      const BNB_bal = _BNB_bal.divn(3);
-      await x.smartpoolOverride(BNB_bal, {from: accounts[0]}); //33% reward - 66% reserve
+      const BNB_bal = _BNB_bal.sub(new BN(10));
+      await x.smartpoolOverride(BNB_bal, {from: accounts[0]}); //100% reward
       const SPBal = await x.smart_pool_balances.call();
       SPBal[0].should.be.a.bignumber.that.equals(BNB_bal);
     });
@@ -79,6 +79,7 @@ contract("Reward Claim", accounts => {
       const val_bnb = '1'+'0'.repeat(19);
       const res = await router.swapExactETHForTokensSupportingFeeOnTransferTokens(0, route_buy, anon, 1907352278, {from: anon, value: val_bnb});
       const init_token = await x.balanceOf.call(anon);
+      console.log("Init balance : "+init_token.toString());
       init_token.should.be.a.bignumber.that.is.not.null;
     });
   });
@@ -139,7 +140,7 @@ contract("Reward Claim", accounts => {
       balance_after.should.be.a.bignumber.greaterThan(balance_before);
     });
 
-    it.skip("Validate tickers", async () => {
+    it("Validate tickers", async () => {
       const res = await x.validateCustomTickers.call();
       assert.equal(res, "Validate: passed");
     })

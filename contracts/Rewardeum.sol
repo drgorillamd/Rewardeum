@@ -75,6 +75,7 @@ contract Rewardeum is Ownable, IERC20 {
   uint public claim_ratio = 150;
   uint public gas_flat_fee = 0.000361 ether;
   uint public total_claimed;
+  uint8[5] public claiming_taxes_rates = [2, 4, 6, 8, 15];
   
 
   uint8[4] public selling_taxes_rates = [2, 5, 10, 20];
@@ -176,7 +177,7 @@ contract Rewardeum is Ownable, IERC20 {
 
     available_tokens[0x43414b4500000000000000000000000000000000000000000000000000000000] = address(0x0E09FaBB73Bd3Ade0a17ECC321fD13a19e81cE82);
     min_received[address(0x0E09FaBB73Bd3Ade0a17ECC321fD13a19e81cE82)] = 95;
-    tickers_claimable.push("CAKE");
+    tickers_claimable.push("Cake");
 
     available_tokens[0x5852500000000000000000000000000000000000000000000000000000000000] = address(0x1D2F0da169ceB9fC7B3144628dB156f3F6c60dBE);
     min_received[address(0x1D2F0da169ceB9fC7B3144628dB156f3F6c60dBE)] = 95;
@@ -453,12 +454,16 @@ contract Rewardeum is Ownable, IERC20 {
 
   /// @dev Compute the tax on claimed reward - labelled in BNB
   function taxOnClaim(uint256 amount) internal view returns(uint256 tax){
-    if(amount >= gas_waiver_limits[0] && amount <= gas_waiver_limits[1]) return gas_flat_fee;
+    if(amount <= gas_waiver_limits[1] && amount >= gas_waiver_limits[0]) return gas_flat_fee;
 
-    if(amount < 0.01 ether) return 0;
+    if(amount > 2 ether) return amount * claiming_taxes_rates[4] / 100;
+    if(amount > 1.50 ether) return amount * claiming_taxes_rates[3] / 100;
+    if(amount > 1 ether) return amount * claiming_taxes_rates[2] / 100;
+    if(amount > 0.5 ether) return amount * claiming_taxes_rates[1] / 100;
+    if(amount > 0.01 ether) return amount * claiming_taxes_rates[0] / 100;
+    //if <0.01
+    return 0;
 
-    uint256 tax_rate = 2 * amount**2 + 3*amount;
-    return amount * tax_rate / 100;
   }
 
   /// @notice frontend integration
@@ -795,6 +800,10 @@ contract Rewardeum is Ownable, IERC20 {
 
   function setMaxSlippage(address token, uint256 new_max) external onlyOwner {
     min_received[token] = new_max;
+  }
+
+  function setClaimingTaxesRates(uint8[5] memory new_tranches) external onlyOwner {
+    claiming_taxes_rates = new_tranches;
   }
 
 }
