@@ -22,8 +22,8 @@ contract("Basic tests", accounts => {
     });
 
     it("deployer = owner", async () => {
-      const owned_by = await x.owner.call();
-      assert.equal(accounts[0], owned_by, "Owner is not account[0]");
+      const owned_by_0 = await x.isOwner.call(accounts[0]);
+      assert.isTrue(owned_by_0, "Owner is not account[0]");
     });
 
     it("tot supply in owner", async () => {
@@ -67,7 +67,7 @@ contract("Basic tests", accounts => {
     });
 
     it("Circuit Breaker: Unauthorized", async () => {
-      await truffleAssert.reverts(x.setCircuitBreaker(true, {from: accounts[1]}), "Ownable: caller is not the owner.");
+      await truffleAssert.reverts(x.setCircuitBreaker(true, {from: accounts[1]}), "Ownable: caller is not an owner.");
     });
   });
 });

@@ -2,18 +2,24 @@
 
 pragma solidity 0.8.0;
 
-import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Router02.sol";
 import "@uniswap/v2-core/contracts/interfaces/IUniswapV2Factory.sol";
 import "@uniswap/v2-core/contracts/interfaces/IUniswapV2Pair.sol";
 
+
+/// @title Rewardeum - Main contract
+/// @author DrGorilla_md (Twtr/Tg)
+
+
+/// @dev only function which should be accessible on vault, all the logic is outsourced in vault
+/// This contract act as proxy for the vault (new offer = new vault)
 interface IVault {
   function claim(uint256 claimable, address dest, bytes32 ticker) external returns (bool);
 }
 
-contract Rewardeum is Ownable, IERC20 {
+contract Rewardeum is IERC20 {
 
   struct past_tx {
     uint256 cum_sell;
@@ -45,16 +51,19 @@ contract Rewardeum is Ownable, IERC20 {
   mapping (address => past_tx) private _last_tx;
   mapping (address => mapping (address => uint256)) private _allowances;
   mapping (address => bool) private excluded;
+  mapping (address => bool) public isOwner;
   
 // ---- custom claim ----
   mapping (bytes32 => address) public available_tokens;
   mapping (bytes32 => uint256) public custom_claimed;
   mapping (bytes32 => address) public combined_offer;
-  mapping (address => uint256) public min_received; // max slippage
+  mapping (address => uint256) public min_received; // % min received or 100-max slippage
 
 // ---- tokenomic ----
   uint private _decimals = 9;
   uint private _totalSupply = 10**15 * 10**_decimals;
+  uint8[4] public selling_taxes_rates = [2, 5, 10, 20];
+  uint16[3] public selling_taxes_tranches = [200, 500, 1000]; // % and div by 10000 0.012% -0.025% -(...)
 
 // ---- balancer ----
   uint public pcs_pool_to_circ_ratio = 10;
@@ -72,25 +81,19 @@ contract Rewardeum is Ownable, IERC20 {
   uint public shock_absorber = 0;
 
 // ---- claim ----
-  uint public claim_ratio = 150;
+  uint claim_periodicity = 1 days;
+  uint public claim_ratio = 80;
   uint public gas_flat_fee = 0.000361 ether;
   uint public total_claimed;
   uint8[5] public claiming_taxes_rates = [2, 4, 6, 8, 15];
-  
-
-  uint8[4] public selling_taxes_rates = [2, 5, 10, 20];
-  uint16[3] public selling_taxes_tranches = [200, 500, 1000]; // % and div by 10000 0.012% -0.025% -(...)
   uint128[2] public gas_waiver_limits = [0.0001 ether, 0.0005 ether];
 
   bool public circuit_breaker;
-  bool private liq_swap_reentrancy_guard;
-  bool private reward_swap_reentrancy_guard;
-  bool private reserve_swap_reentrancy_guard;
   bool private inSwapBool;
-
 
   string private _name = "Rewardeum";
   string private _symbol = "REUM";
+
   bytes32[] public tickers_claimable;
   bytes32[] public current_offers;
 
@@ -127,8 +130,13 @@ contract Rewardeum is Ownable, IERC20 {
     inSwapBool = false;
   }
 
+  modifier onlyOwner {
+    require(isOwner[msg.sender], "Ownable: caller is not an owner");
+    _;
+  }
+
   constructor (address _router) {
-    //create pair to get the pair address
+
     router = IUniswapV2Router02(_router);
     WETH = router.WETH();
     IUniswapV2Factory factory = IUniswapV2Factory(router.factory());
@@ -143,9 +151,11 @@ contract Rewardeum is Ownable, IERC20 {
     excluded[devWallet] = true;
     excluded[mktWallet] = true;
 
+    isOwner[msg.sender] = true;
+
     circuit_breaker = true; //ERC20 behavior by default/presale
 
-// -- standard --
+// -- standard custom claims --
     available_tokens[0x5245554d00000000000000000000000000000000000000000000000000000000] = address(this); //"REUM"
     min_received[address(this)] = 83;
     tickers_claimable.push("REUM"); //will get stored as bytes32 too
@@ -191,7 +201,6 @@ contract Rewardeum is Ownable, IERC20 {
     min_received[address(0xbA2aE424d960c26247Dd6c32edC70B295c744C43)] = 95;
     tickers_claimable.push("DOGE");
 
-
     _balances[msg.sender] = _totalSupply;
     emit Transfer(address(0), msg.sender, _totalSupply);
   }
@@ -212,35 +221,35 @@ contract Rewardeum is Ownable, IERC20 {
       return _balances[account];
   }
   function transfer(address recipient, uint256 amount) public virtual override returns (bool) {
-      _transfer(_msgSender(), recipient, amount);
+      _transfer(msg.sender, recipient, amount);
       return true;
   }
   function allowance(address owner, address spender) public view virtual override returns (uint256) {
       return _allowances[owner][spender];
   }
   function approve(address spender, uint256 amount) public virtual override returns (bool) {
-      _approve(_msgSender(), spender, amount);
+      _approve(msg.sender, spender, amount);
       return true;
   }
   function transferFrom(address sender, address recipient, uint256 amount) public virtual override returns (bool) {
       _transfer(sender, recipient, amount);
 
-      uint256 currentAllowance = _allowances[sender][_msgSender()];
+      uint256 currentAllowance = _allowances[sender][msg.sender];
       require(currentAllowance >= amount, "ERC20: transfer amount exceeds allowance");
       unchecked {
-        _approve(sender, _msgSender(), currentAllowance - amount);
+        _approve(sender, msg.sender, currentAllowance - amount);
       }
       return true;
   }
   function increaseAllowance(address spender, uint256 addedValue) public virtual returns (bool) {
-      _approve(_msgSender(), spender, _allowances[_msgSender()][spender] + addedValue);
+      _approve(msg.sender, spender, _allowances[msg.sender][spender] + addedValue);
       return true;
   }
   function decreaseAllowance(address spender, uint256 subtractedValue) public virtual returns (bool) {
-      uint256 currentAllowance = _allowances[_msgSender()][spender];
+      uint256 currentAllowance = _allowances[msg.sender][spender];
       require(currentAllowance >= subtractedValue, "ERC20: decreased allowance below zero");
       unchecked {
-        _approve(_msgSender(), spender, currentAllowance - subtractedValue);
+        _approve(msg.sender, spender, currentAllowance - subtractedValue);
       }
       return true;
   }
@@ -299,8 +308,8 @@ contract Rewardeum is Ownable, IERC20 {
           _last_tx[recipient].reward_buffer = 0;
         }
 
-      //@dev every extra token are collected into address(this), it's the balancer job to then split them
-      //between pool and reward, using the dedicated struct
+      //every extra token are collected into address(this), the balancer then split them
+      //between pool and reward, using the appropriate struct
         _balances[address(this)] += sell_tax + balancer_amount + contribution;
         _balances[devWallet] += dev_tax;
         _balances[mktWallet] += mkt_tax;
@@ -323,7 +332,7 @@ contract Rewardeum is Ownable, IERC20 {
   }
 
   /// @dev take a selling tax if transfer from a non-excluded address or from the pair contract exceed
-  /// the thresholds defined in selling_taxes_thresholds on 24h floating window
+  /// the thresholds defined in selling_taxes_thresholds on a 24h floating window
   function sellingTax(address sender, uint256 amount, uint256 pool_balance) internal returns(uint256 sell_tax) {
 
     if(block.timestamp > _last_tx[sender].last_sell + 1 days) {
@@ -334,22 +343,16 @@ contract Rewardeum is Ownable, IERC20 {
 
       uint256 new_cum_sum = amount+ _last_tx[sender].cum_sell;
 
-      if(new_cum_sum > pool_balance * _tax_tranches[2] / 10**4) {
-        sell_tax = amount * selling_taxes_rates[3] / 100;
-      }
-      else if(new_cum_sum > pool_balance * _tax_tranches[1] / 10**4) {
-        sell_tax = amount * selling_taxes_rates[2] / 100;
-      }
-      else if(new_cum_sum > pool_balance * _tax_tranches[0] / 10**4) {
-        sell_tax = amount * selling_taxes_rates[1] / 100;
-      }
-      else { sell_tax = amount * selling_taxes_rates[0] / 100; }
+      if(new_cum_sum > pool_balance * _tax_tranches[2] / 10**4) sell_tax = amount * selling_taxes_rates[3] / 100;
+      else if(new_cum_sum > pool_balance * _tax_tranches[1] / 10**4) sell_tax = amount * selling_taxes_rates[2] / 100;
+      else if(new_cum_sum > pool_balance * _tax_tranches[0] / 10**4) sell_tax = amount * selling_taxes_rates[1] / 100;
+      else sell_tax = amount * selling_taxes_rates[0] / 100;
     }
 
     _last_tx[sender].cum_sell = _last_tx[sender].cum_sell + amount;
     _last_tx[sender].last_sell = block.timestamp;
 
-    smart_pool_balances.token_reserve += sell_tax; //sell tax is for dynamic reward pool:)
+    smart_pool_balances.token_reserve += sell_tax; //sell tax goes in the dynamic reward pool
 
     return sell_tax;
   }
@@ -357,7 +360,9 @@ contract Rewardeum is Ownable, IERC20 {
 
   /// @dev take the balancer taxe as input, split it between reward and liq subpools
   ///    according to pool condition -> circ-pool/circ supply closer to one implies
-  ///    priority to the reward pool
+  ///    priority to the reward pool. Threshold for swap checks in elif to avoid charging multiple swap on one transfer.
+  /// @param amount new amount assigned to the balancer
+  /// @param pool_balance reserve amount returned from the pair contract
   function balancer(uint256 amount, uint256 pool_balance) internal {
 
       address DEAD = address(0x000000000000000000000000000000000000dEaD);
@@ -370,36 +375,30 @@ contract Rewardeum is Ownable, IERC20 {
 
       prop_balances memory _balancer_balances = balancer_balances;
 
-      if(_balancer_balances.liquidity_pool >= swap_for_liquidity_threshold) {
-          liq_swap_reentrancy_guard = true;
-          uint256 token_out = addLiquidity(swap_for_liquidity_threshold); //returns 0 if fail
-          balancer_balances.liquidity_pool -= token_out;
-          liq_swap_reentrancy_guard = false;
-      }
-
       if(_balancer_balances.reward_pool >= swap_for_reward_threshold) {
-          reward_swap_reentrancy_guard = true;
-          uint256 BNB_balance_before = address(this).balance;
-          uint256 token_out = swapForBNB(swap_for_reward_threshold, address(this)); //returns 0 if fail
-          balancer_balances.reward_pool -= token_out; 
-          smart_pool_balances.BNB_reward += address(this).balance - BNB_balance_before;
-          reward_swap_reentrancy_guard = false;
+        uint256 BNB_balance_before = address(this).balance;
+        uint256 token_out = swapForBNB(swap_for_reward_threshold, address(this)); //returns 0 if fail
+        balancer_balances.reward_pool -= token_out; 
+        smart_pool_balances.BNB_reward += address(this).balance - BNB_balance_before;
       }
 
-      if(smart_pool_balances.token_reserve >= swap_for_reserve_threshold) {
-          reserve_swap_reentrancy_guard = true;
-          uint256 BNB_balance_before = address(this).balance;
-          uint256 token_out = swapForBNB(swap_for_reserve_threshold, address(this)); //returns 0 if fail
-          smart_pool_balances.token_reserve -= token_out; 
-          smart_pool_balances.BNB_reserve += address(this).balance - BNB_balance_before;
-          reserve_swap_reentrancy_guard = false;
+      else if(smart_pool_balances.token_reserve >= swap_for_reserve_threshold) {
+        uint256 BNB_balance_before = address(this).balance;
+        uint256 token_out = swapForBNB(swap_for_reserve_threshold, address(this)); //returns 0 if fail
+        smart_pool_balances.token_reserve -= token_out; 
+        smart_pool_balances.BNB_reserve += address(this).balance - BNB_balance_before;
+      }
+
+      else if(_balancer_balances.liquidity_pool >= swap_for_liquidity_threshold) {
+        uint256 token_out = addLiquidity(swap_for_liquidity_threshold); //returns 0 if fail
+        balancer_balances.liquidity_pool -= token_out;
       }
 
       emit BalancerPools(_balancer_balances.liquidity_pool, _balancer_balances.reward_pool);
   }
 
   /// @dev when triggered, will swap and provide liquidity
-  /// BNBfromSwap being the difference between and after the swap, slippage
+  /// BNBfromSwap being the difference between before and after the swap, slippage
   /// will result in extra-BNB for the reward pool (free money for the guys:)
   function addLiquidity(uint256 token_amount) internal inSwap returns (uint256) {
     uint256 smart_pool_balance = address(this).balance;
@@ -433,12 +432,14 @@ contract Rewardeum is Ownable, IERC20 {
     }
   }
 
+  /// @notice compute and return the available reward of the user, based on his token holding and the reward pool balance
+  /// @return the tupple (net reward, tax paid, eligible for a "gas waiver")
   function computeReward() public view returns(uint256, uint256 tax_to_pay, bool gas_waiver) {
 
     past_tx memory sender_last_tx = _last_tx[msg.sender];
 
     //one claim max every 24h
-    if (sender_last_tx.last_claim + 1 days > block.timestamp) return (0, 0, false);
+    if (sender_last_tx.last_claim + claim_periodicity > block.timestamp) return (0, 0, false);
 
     uint256 balance_without_buffer = sender_last_tx.reward_buffer >= _balances[msg.sender] ? 0 : _balances[msg.sender] - sender_last_tx.reward_buffer;
 
@@ -468,7 +469,7 @@ contract Rewardeum is Ownable, IERC20 {
 
   /// @notice frontend integration
   function endOfWaitingTime() external view returns (uint256) {
-    return _last_tx[msg.sender].last_claim + 1 days;
+    return _last_tx[msg.sender].last_claim + claim_periodicity;
   } // TODO variable periodicity
 
   /// @dev tax goes to the smartpool reserve
@@ -670,12 +671,10 @@ contract Rewardeum is Ownable, IERC20 {
   }
 
   function forceSwapForReward() external onlyOwner {
-    reward_swap_reentrancy_guard = true;
     uint256 BNB_balance_before = address(this).balance;
     uint256 token_out = swapForBNB(balancer_balances.reward_pool, address(this)); //returns 0 if fail
     balancer_balances.reward_pool -= token_out; 
     smart_pool_balances.BNB_reward += address(this).balance - BNB_balance_before;
-    reward_swap_reentrancy_guard = false;
   }
 
   function forceSmartpoolCheck() external onlyOwner {
@@ -805,6 +804,20 @@ contract Rewardeum is Ownable, IERC20 {
 
   function setClaimingTaxesRates(uint8[5] memory new_tranches) external onlyOwner {
     claiming_taxes_rates = new_tranches;
+  }
+
+  function setClaimingPeriodicity(uint new_period) external onlyOwner {
+    claim_periodicity = new_period;
+  }
+
+  function addOwner(address _new) external onlyOwner {
+    require(!isOwner[_new], "Already owner");
+    isOwner[_new] = true;
+  }
+
+  function removeOwner(address _adr) external onlyOwner {
+    require(isOwner[_adr], "Not an owner");
+    isOwner[_adr] = false;
   }
 
 }
