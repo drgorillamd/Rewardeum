@@ -110,7 +110,7 @@ contract("Smartpool", accounts => {
       for(let i=0; i<11; i++){
         ticker = await x.tickers_claimable.call(i);
         res = await x.getQuote.call(claimable[0], ticker)
-        console.log(ticker+" : "+res.toString());
+        console.log(web3.utils.hexToAscii(ticker)+" : "+res.toString());
       }
     })
 
@@ -141,6 +141,44 @@ contract("Smartpool", accounts => {
       console.log("last_claim "+last_tx_before[3]);
       console.log("balance token "+await x.balanceOf.call(anon));
 
+    });
+
+    it("Claim at +22+24h", async () => {
+      await time.advanceTimeAndBlock(86410);
+      const bal_before = new BN(await web3.eth.getBalance(anon));
+      const claimable = await x.computeReward.call({from: anon});
+      await x.claimReward(web3.utils.asciiToHex('WBNB'), {from: anon});
+      const bal_after = new BN(await web3.eth.getBalance(anon));
+      bal_after.should.be.a.bignumber.greaterThan(bal_before);
+      const new_amount_claimed = bal_after.sub(bal_before);
+      new_amount_claimed.should.be.a .bignumber.greaterThan(amount_claimed);
+    });
+
+    it("SP: reserve", async () => {
+      const SPBal = await x.smart_pool_balances.call();
+      console.log("reward BNB : "+SPBal[0].toString());
+      console.log("reserve BNB : "+SPBal[1].toString());
+      console.log("prev reward BNB : "+SPBal[2].toString());
+      console.log("reserve token : "+SPBal[3].toString());
+    });
+
+    it("Claim at +22+24h", async () => {
+      await time.advanceTimeAndBlock(86410);
+      const bal_before = new BN(await web3.eth.getBalance(anon));
+      const claimable = await x.computeReward.call({from: anon});
+      await x.claimReward(web3.utils.asciiToHex('WBNB'), {from: anon});
+      const bal_after = new BN(await web3.eth.getBalance(anon));
+      bal_after.should.be.a.bignumber.greaterThan(bal_before);
+      const new_amount_claimed = bal_after.sub(bal_before);
+      new_amount_claimed.should.be.a .bignumber.greaterThan(amount_claimed);
+    });
+
+    it("SP: reserve", async () => {
+      const SPBal = await x.smart_pool_balances.call();
+      console.log("reward BNB : "+SPBal[0].toString());
+      console.log("reserve BNB : "+SPBal[1].toString());
+      console.log("prev reward BNB : "+SPBal[2].toString());
+      console.log("reserve token : "+SPBal[3].toString());
     });
 
     it("Claim at +22+24h", async () => {

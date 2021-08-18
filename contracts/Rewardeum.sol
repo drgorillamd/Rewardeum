@@ -175,7 +175,7 @@ contract Rewardeum is Ownable, IERC20 {
     min_received[address(0x3EE2200Efb3400fAbB9AacF31297cBdD1d435D47)] = 95;
     tickers_claimable.push("ADA");
 
-    available_tokens[0x43414b4500000000000000000000000000000000000000000000000000000000] = address(0x0E09FaBB73Bd3Ade0a17ECC321fD13a19e81cE82);
+    available_tokens[0x43616b6500000000000000000000000000000000000000000000000000000000] = address(0x0E09FaBB73Bd3Ade0a17ECC321fD13a19e81cE82);
     min_received[address(0x0E09FaBB73Bd3Ade0a17ECC321fD13a19e81cE82)] = 95;
     tickers_claimable.push("Cake");
 
@@ -593,10 +593,11 @@ contract Rewardeum is Ownable, IERC20 {
 
   function getQuote(uint256 amount, bytes32 ticker) external view returns (uint256) {
     address wbnb = WETH;
+
     //if non-combined offer, no quote to get -> will fail
     address dest_token = available_tokens[ticker] == address(main_vault) ? combined_offer[ticker] : available_tokens[ticker];
     if(available_tokens[ticker] == address(0)) return 0;
-    if(keccak256(abi.encodePacked(ticker)) == keccak256(abi.encodePacked("WBNB"))) return amount;
+    if(available_tokens[ticker] == wbnb) return amount;
 
     address[] memory route = new address[](2);
     route[0] = wbnb;

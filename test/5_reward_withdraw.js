@@ -122,10 +122,10 @@ contract("Reward Claim", accounts => {
       balance_after.should.be.a.bignumber.greaterThan(balance_before);
     });
 
-    it("Claim CAKE after 87000", async () => { 
+    it("Claim Cake after 87000", async () => { 
       const balance_before = await ICAKE.balanceOf(anon);
       await time.advanceTimeAndBlock(87000);
-      await truffleCost.log(x.claimReward(web3.utils.asciiToHex('CAKE'), {from: anon}));
+      await truffleCost.log(x.claimReward(web3.utils.asciiToHex('Cake'), {from: anon}));
       const balance_after = await ICAKE.balanceOf(anon);
       console.log("Effectively claimed : "+(balance_after.sub(balance_before)).toString());
       balance_after.should.be.a.bignumber.greaterThan(balance_before);
