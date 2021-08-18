@@ -108,17 +108,19 @@ contract("Vault.sol", accounts => {
 
   describe("Adding bonus to claim", () => {
     it("Adding reum in bonus list", async () => {
-      await x.addClaimable(v.address, "REUM", 85, {from: accounts[0]});
-      await x.addCombinedOffer(x.address, "REUM", {from: accounts[0]});
-      const new_adr = await x.available_tokens.call("REUM");
-      const new_combined = await x.combined_offer.call("REUM");
+      const reum = web3.utils.asciiToHex("REUM");
+      await x.addClaimable(v.address, reum, 85, {from: accounts[0]});
+      await x.addCombinedOffer(x.address, reum, {from: accounts[0]});
+      const new_adr = await x.available_tokens.call(reum);
+      const new_combined = await x.combined_offer.call(reum);
       assert.equal(new_adr, v.address);
       assert.equal(new_combined, x.address);
     })
 
     it("Adding NFT_TEST in bonus list", async () => {
-      await x.addClaimable(v.address, "NFT_TEST", 0, {from: accounts[0]});
-      const new_adr = await x.available_tokens.call("NFT_TEST");
+      const nft_test = web3.utils.asciiToHex("NFT_TEST") 
+      await x.addClaimable(v.address, nft_test, 0, {from: accounts[0]});
+      const new_adr = await x.available_tokens.call(nft_test);
       assert.equal(new_adr, v.address);
     })
   });
@@ -127,43 +129,46 @@ contract("Vault.sol", accounts => {
 
     it("claim directly from vault -> revert ?", async () => {
       await time.advanceTimeAndBlock(87000);
-      await truffleAssert.reverts(v.claim('10000', anon, 'REUM', {from: anon}), "Vault: unauthorized access");
+      const reum = web3.utils.asciiToHex("REUM");
+      await truffleAssert.reverts(v.claim('10000', anon, reum, {from: anon}), "Vault: unauthorized access");
     })
 
     it("Claiming Reum", async () => {
       await time.advanceTimeAndBlock(87000);
+      const reum = web3.utils.asciiToHex("REUM");
       const claimable_reward = await x.computeReward.call({from: anon});
       console.log("claimable : "+claimable_reward[0]);
 
       //gas waiver!
       //const get_taxOnClaim = ( ((claimable_reward[0].pow(new BN('2'))).mul(new BN('2'))).add(claimable_reward[0].mul(new BN('3'))) ).divn(new BN('100'));
 
-      const get_quote = await x.getQuote.call(claimable_reward[0], "REUM");
+      const get_quote = await x.getQuote.call(claimable_reward[0], reum);
       const bal_before = await x.balanceOf.call(anon);
       const vault_bal = await x.balanceOf.call(v.address);
-      await truffleCost.log(x.claimReward("REUM", {from: anon}));
+      await truffleCost.log(x.claimReward(reum, {from: anon}));
       const bal_after = await x.balanceOf.call(anon);
       bal_after.should.be.a.bignumber.that.is.closeTo(bal_before.add(vault_bal).add(get_quote), '1000000');
     })
 
     it("Claim NFT_TEST", async () => {
-      await v.addAsset("NFT_TEST", n.address, {from: accounts[0]});
+      const nft_test = web3.utils.asciiToHex("NFT_TEST");
+      await v.addAsset(nft_test, n.address, {from: accounts[0]});
       await time.advanceTimeAndBlock(87000);
-      await truffleCost.log(x.claimReward("NFT_TEST", {from: anon}));
+      await truffleCost.log(x.claimReward(nft_test, {from: anon}));
       const new_owner = await n.ownerOf.call(1);
       assert.equal(new_owner, anon, "NFT Claim error")
     })
     it("Control: Claim BNB at 87000 sec", async () => {
       const balance_before = new BN(await web3.eth.getBalance(anon));
       await time.advanceTimeAndBlock(87000);
-      await truffleCost.log(x.claimReward('WBNB', {from: anon}));
+      await truffleCost.log(x.claimReward(web3.utils.asciiToHex('WBNB'), {from: anon}));
       const balance_after = new BN(await web3.eth.getBalance(anon));
       balance_after.should.be.a.bignumber.that.is.greaterThan(balance_before);
     });
     it("Control: Claim BTCB after 87000", async () => { 
       await time.advanceTimeAndBlock(87000);
-      const quote = await x.getQuote.call('1'+'0'.repeat(18), "BTCB");
-      await truffleCost.log(x.claimReward('BTCB', {from: anon}));
+      const quote = await x.getQuote.call('1'+'0'.repeat(18), web3.utils.asciiToHex("BTCB"));
+      await truffleCost.log(x.claimReward(web3.utils.asciiToHex('BTCB'), {from: anon}));
     });
   
   });

@@ -10,7 +10,7 @@ import "@uniswap/v2-core/contracts/interfaces/IUniswapV2Factory.sol";
 import "@uniswap/v2-core/contracts/interfaces/IUniswapV2Pair.sol";
 
 interface IVault {
-  function claim(uint256 claimable, address dest, string memory ticker) external returns (bool);
+  function claim(uint256 claimable, address dest, bytes32 ticker) external returns (bool);
 }
 
 contract Rewardeum is Ownable, IERC20 {
@@ -47,10 +47,10 @@ contract Rewardeum is Ownable, IERC20 {
   mapping (address => bool) private excluded;
   
 // ---- custom claim ----
-  mapping (string => address) public available_tokens;
-  mapping (string => uint256) public custom_claimed;
-  mapping (string => address) public combined_offer;
-  mapping (address => uint256) public min_received;
+  mapping (bytes32 => address) public available_tokens;
+  mapping (bytes32 => uint256) public custom_claimed;
+  mapping (bytes32 => address) public combined_offer;
+  mapping (address => uint256) public min_received; // max slippage
 
 // ---- tokenomic ----
   uint private _decimals = 9;
@@ -72,7 +72,7 @@ contract Rewardeum is Ownable, IERC20 {
   uint public shock_absorber = 0;
 
 // ---- claim ----
-  uint public claim_ratio = 80;
+  uint public claim_ratio = 150;
   uint public gas_flat_fee = 0.000361 ether;
   uint public total_claimed;
   
@@ -90,8 +90,8 @@ contract Rewardeum is Ownable, IERC20 {
 
   string private _name = "Rewardeum";
   string private _symbol = "REUM";
-  string[] public tickers_claimable;
-  string[] public current_offers;
+  bytes32[] public tickers_claimable;
+  bytes32[] public current_offers;
 
   address public LP_recipient;
   address public devWallet;
@@ -109,15 +109,16 @@ contract Rewardeum is Ownable, IERC20 {
   event TaxRatesChanged();
   event SwapForBNB(string status);
   event SwapForCustom(string status);
-  event Claimed(string ticker, uint256 claimable, uint256 tax, bool gas_waiver);
+  event Claimed(bytes32 ticker, uint256 claimable, uint256 tax, bool gas_waiver);
   event BalancerPools(uint256 reward_liq_pool, uint256 reward_token_pool);
   event RewardTaxChanged();
   event AddLiq(string status);
   event BalancerReset(uint256 new_reward_token_pool, uint256 new_reward_liq_pool);
   event Smartpool(uint256 reward, uint256 reserve, uint256 prev_reward);
   event SmartpoolOverride(uint256 new_reward, uint256 new_reserve);
-  event AddClaimableToken(string ticker, address token);
-  event RemoveClaimableToken(string ticker);
+  event AddClaimableToken(bytes32 ticker, address token);
+  event RemoveClaimableToken(bytes32 ticker);
+  event TransferBNB(address, uint256);
 
   modifier inSwap {
     inSwapBool = true;
@@ -144,48 +145,48 @@ contract Rewardeum is Ownable, IERC20 {
     circuit_breaker = true; //ERC20 behavior by default/presale
 
 // -- standard --
-    available_tokens["REUM"] = address(this);
+    available_tokens[0x5245554d00000000000000000000000000000000000000000000000000000000] = address(this); //"REUM"
     min_received[address(this)] = 83;
-    tickers_claimable.push("REUM");
+    tickers_claimable.push("REUM"); //will get stored as bytes32 too
 
-    available_tokens["WBNB"] = WETH;
+    available_tokens[0x57424e4200000000000000000000000000000000000000000000000000000000] = address(WETH);
     min_received[WETH] = 95;
     tickers_claimable.push("WBNB");
 
-    available_tokens["BTCB"] = address(0x7130d2A12B9BCbFAe4f2634d864A1Ee1Ce3Ead9c);
+    available_tokens[0x4254434200000000000000000000000000000000000000000000000000000000] = address(0x7130d2A12B9BCbFAe4f2634d864A1Ee1Ce3Ead9c);
     min_received[address(0x7130d2A12B9BCbFAe4f2634d864A1Ee1Ce3Ead9c)] = 95;
     tickers_claimable.push("BTCB");
 
-    available_tokens["ETH"] = address(0x2170Ed0880ac9A755fd29B2688956BD959F933F8);
+    available_tokens[0x4554480000000000000000000000000000000000000000000000000000000000] = address(0x2170Ed0880ac9A755fd29B2688956BD959F933F8);
     min_received[address(0x2170Ed0880ac9A755fd29B2688956BD959F933F8)] = 95;
     tickers_claimable.push("ETH");
 
-    available_tokens["BUSD"] = address(0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56);
+    available_tokens[0x4255534400000000000000000000000000000000000000000000000000000000] = address(0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56);
     min_received[address(0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56)] = 95;
     tickers_claimable.push("BUSD");
 
-    available_tokens["USDT"] = address(0x55d398326f99059fF775485246999027B3197955);
+    available_tokens[0x5553445400000000000000000000000000000000000000000000000000000000] = address(0x55d398326f99059fF775485246999027B3197955);
     min_received[address(0x55d398326f99059fF775485246999027B3197955)] = 95;
     tickers_claimable.push("USDT");
 
 // -- limited offer at launch --
-    available_tokens["ADA"] = address(0x3EE2200Efb3400fAbB9AacF31297cBdD1d435D47);
+    available_tokens[0x4144410000000000000000000000000000000000000000000000000000000000] = address(0x3EE2200Efb3400fAbB9AacF31297cBdD1d435D47);
     min_received[address(0x3EE2200Efb3400fAbB9AacF31297cBdD1d435D47)] = 95;
     tickers_claimable.push("ADA");
 
-    available_tokens["CAKE"] = address(0x0E09FaBB73Bd3Ade0a17ECC321fD13a19e81cE82);
+    available_tokens[0x43414b4500000000000000000000000000000000000000000000000000000000] = address(0x0E09FaBB73Bd3Ade0a17ECC321fD13a19e81cE82);
     min_received[address(0x0E09FaBB73Bd3Ade0a17ECC321fD13a19e81cE82)] = 95;
     tickers_claimable.push("CAKE");
 
-    available_tokens["XRP"] = address(0x1D2F0da169ceB9fC7B3144628dB156f3F6c60dBE);
+    available_tokens[0x5852500000000000000000000000000000000000000000000000000000000000] = address(0x1D2F0da169ceB9fC7B3144628dB156f3F6c60dBE);
     min_received[address(0x1D2F0da169ceB9fC7B3144628dB156f3F6c60dBE)] = 95;
     tickers_claimable.push("XRP");
 
-    available_tokens["DOT"] = address(0x7083609fCE4d1d8Dc0C979AAb8c869Ea2C873402);
+    available_tokens[0x444f540000000000000000000000000000000000000000000000000000000000] = address(0x7083609fCE4d1d8Dc0C979AAb8c869Ea2C873402);
     min_received[address(0x7083609fCE4d1d8Dc0C979AAb8c869Ea2C873402)] = 95;
     tickers_claimable.push("DOT");
 
-    available_tokens["DOGE"] = address(0xbA2aE424d960c26247Dd6c32edC70B295c744C43);
+    available_tokens[0x444f474500000000000000000000000000000000000000000000000000000000] = address(0xbA2aE424d960c26247Dd6c32edC70B295c744C43);
     min_received[address(0xbA2aE424d960c26247Dd6c32edC70B295c744C43)] = 95;
     tickers_claimable.push("DOGE");
 
@@ -320,8 +321,8 @@ contract Rewardeum is Ownable, IERC20 {
       emit Transfer(sender, mktWallet, mkt_tax);
   }
 
-  //@dev take a selling tax if transfer from a non-excluded address or from the pair contract exceed
-  //the thresholds defined in selling_taxes_thresholds on 24h floating window
+  /// @dev take a selling tax if transfer from a non-excluded address or from the pair contract exceed
+  /// the thresholds defined in selling_taxes_thresholds on 24h floating window
   function sellingTax(address sender, uint256 amount, uint256 pool_balance) internal returns(uint256 sell_tax) {
 
     if(block.timestamp > _last_tx[sender].last_sell + 1 days) {
@@ -353,9 +354,9 @@ contract Rewardeum is Ownable, IERC20 {
   }
 
 
-  //@dev take the balancer taxe as input, split it between reward and liq subpools
-  //    according to pool condition -> circ-pool/circ supply closer to one implies
-  //    priority to the reward pool
+  /// @dev take the balancer taxe as input, split it between reward and liq subpools
+  ///    according to pool condition -> circ-pool/circ supply closer to one implies
+  ///    priority to the reward pool
   function balancer(uint256 amount, uint256 pool_balance) internal {
 
       address DEAD = address(0x000000000000000000000000000000000000dEaD);
@@ -370,7 +371,7 @@ contract Rewardeum is Ownable, IERC20 {
 
       if(_balancer_balances.liquidity_pool >= swap_for_liquidity_threshold) {
           liq_swap_reentrancy_guard = true;
-          uint256 token_out = addLiquidity(_balancer_balances.liquidity_pool); //returns 0 if fail
+          uint256 token_out = addLiquidity(swap_for_liquidity_threshold); //returns 0 if fail
           balancer_balances.liquidity_pool -= token_out;
           liq_swap_reentrancy_guard = false;
       }
@@ -378,7 +379,7 @@ contract Rewardeum is Ownable, IERC20 {
       if(_balancer_balances.reward_pool >= swap_for_reward_threshold) {
           reward_swap_reentrancy_guard = true;
           uint256 BNB_balance_before = address(this).balance;
-          uint256 token_out = swapForBNB(_balancer_balances.reward_pool, address(this)); //returns 0 if fail
+          uint256 token_out = swapForBNB(swap_for_reward_threshold, address(this)); //returns 0 if fail
           balancer_balances.reward_pool -= token_out; 
           smart_pool_balances.BNB_reward += address(this).balance - BNB_balance_before;
           reward_swap_reentrancy_guard = false;
@@ -387,7 +388,7 @@ contract Rewardeum is Ownable, IERC20 {
       if(smart_pool_balances.token_reserve >= swap_for_reserve_threshold) {
           reserve_swap_reentrancy_guard = true;
           uint256 BNB_balance_before = address(this).balance;
-          uint256 token_out = swapForBNB(smart_pool_balances.token_reserve, address(this)); //returns 0 if fail
+          uint256 token_out = swapForBNB(swap_for_reserve_threshold, address(this)); //returns 0 if fail
           smart_pool_balances.token_reserve -= token_out; 
           smart_pool_balances.BNB_reserve += address(this).balance - BNB_balance_before;
           reserve_swap_reentrancy_guard = false;
@@ -396,9 +397,9 @@ contract Rewardeum is Ownable, IERC20 {
       emit BalancerPools(_balancer_balances.liquidity_pool, _balancer_balances.reward_pool);
   }
 
-  //@dev when triggered, will swap and provide liquidity
-  //    BNBfromSwap being the difference between and after the swap, slippage
-  //    will result in extra-BNB for the reward pool (free money for the guys:)
+  /// @dev when triggered, will swap and provide liquidity
+  /// BNBfromSwap being the difference between and after the swap, slippage
+  /// will result in extra-BNB for the reward pool (free money for the guys:)
   function addLiquidity(uint256 token_amount) internal inSwap returns (uint256) {
     uint256 smart_pool_balance = address(this).balance;
 
@@ -450,7 +451,7 @@ contract Rewardeum is Ownable, IERC20 {
     return (gross_reward_in_BNB - tax_to_pay, tax_to_pay, false);
   }
 
-  //@dev Compute the tax on claimed reward - labelled in BNB
+  /// @dev Compute the tax on claimed reward - labelled in BNB
   function taxOnClaim(uint256 amount) internal view returns(uint256 tax){
     if(amount >= gas_waiver_limits[0] && amount <= gas_waiver_limits[1]) return gas_flat_fee;
 
@@ -460,13 +461,13 @@ contract Rewardeum is Ownable, IERC20 {
     return amount * tax_rate / 100;
   }
 
-  //@dev frontend integration
+  /// @notice frontend integration
   function endOfWaitingTime() external view returns (uint256) {
-    return _last_tx[msg.sender].last_claim;
-  }
+    return _last_tx[msg.sender].last_claim + 1 days;
+  } // TODO variable periodicity
 
-  //@dev tax goes to the smartpool reserve
-  function claimReward(string calldata ticker) external {
+  /// @dev tax goes to the smartpool reserve
+  function claimReward(bytes32 ticker) external {
     (uint256 claimable, uint256 tax, bool gas_waiver) = computeReward();
     require(claimable > 0, "Claim: 0");
 
@@ -478,21 +479,20 @@ contract Rewardeum is Ownable, IERC20 {
 
     _last_tx[msg.sender].reward_buffer = 0;
     _last_tx[msg.sender].last_claim = block.timestamp;
+
+    custom_claimed[ticker]++;
+    total_claimed += claimable;
               
     if(last_smartpool_check < block.timestamp + smart_pool_freq) smartPoolCheck();
 
     if(dest_token == WETH) safeTransferETH(msg.sender, claimable);
-
     else if(dest_token == address(main_vault)) {
       bool success = main_vault.claim(claimable, msg.sender, ticker); //multiple bonuses -> same vault address, key passed to get the correct one in vault contract
       require(success, "vault error");
       if(combined_offer[ticker] != address(0)) swapForCustom(claimable, msg.sender, combined_offer[ticker]);
     }
-
     else swapForCustom(claimable, msg.sender, dest_token);
 
-    custom_claimed[ticker]++;
-    total_claimed += claimable;
     emit Claimed(ticker, claimable, tax, gas_waiver);
   }
 
@@ -586,7 +586,7 @@ contract Rewardeum is Ownable, IERC20 {
     }
   }
 
-  function getQuote(uint256 amount, string calldata ticker) external view returns (uint256) {
+  function getQuote(uint256 amount, bytes32 ticker) external view returns (uint256) {
     address wbnb = WETH;
     //if non-combined offer, no quote to get -> will fail
     address dest_token = available_tokens[ticker] == address(main_vault) ? combined_offer[ticker] : available_tokens[ticker];
@@ -608,16 +608,28 @@ contract Rewardeum is Ownable, IERC20 {
     for(uint i = 0; i < tickers_claimable.length; i++) {
       if(available_tokens[tickers_claimable[i]] != address(main_vault) &&
         keccak256(abi.encodePacked(ERC20(available_tokens[tickers_claimable[i]]).symbol()))
-        != keccak256(abi.encodePacked(tickers_claimable[i])))
-        return(tickers_claimable[i]);
+        != keccak256(abi.encodePacked(bytes32ToString(tickers_claimable[i]))))
+        return(bytes32ToString(tickers_claimable[i]));
     }
     return "Validate: passed";
   }
 
-  //@dev taken from uniswapV2 TransferHelper lib
+  function bytes32ToString(bytes32 _bytes32) public pure returns (string memory) {
+    uint8 i = 0;
+    while(i < 32 && _bytes32[i] != 0) {
+        i++;
+    }
+    bytes memory bytesArray = new bytes(i);
+    for (i = 0; i < 32 && _bytes32[i] != 0; i++) {
+        bytesArray[i] = _bytes32[i];
+    }
+    return string(bytesArray);
+  }
+
   function safeTransferETH(address to, uint value) internal {
-      (bool success,) = to.call{value:value}(new bytes(0));
+      (bool success,) = payable(to).call{value: value}(new bytes(0));
       require(success, 'TransferHelper: ETH_TRANSFER_FAILED');
+      emit TransferBNB(to, value);
   }
 
   //@dev fallback in order to receive BNB from swapToBNB
@@ -688,20 +700,20 @@ contract Rewardeum is Ownable, IERC20 {
     main_vault = IVault(new_vault);
   }
 
-  function addClaimable(address new_token, string memory ticker, uint256 _min_received_percents) external onlyOwner {
+  function addClaimable(address new_token, bytes32 ticker, uint256 _min_received_percents) external onlyOwner {
     available_tokens[ticker] = new_token;
     tickers_claimable.push(ticker);
     min_received[new_token] = _min_received_percents;
     emit AddClaimableToken(ticker, new_token);
   }
 
-  function removeClaimable(string memory ticker) external onlyOwner {
+  function removeClaimable(bytes32 ticker) external onlyOwner {
     delete available_tokens[ticker];
     delete custom_claimed[ticker];
 
-    string[] memory _tickers_claimable = tickers_claimable;
+    bytes32[] memory _tickers_claimable = tickers_claimable;
     for(uint i=0; i<_tickers_claimable.length; i++) {
-      if(keccak256(abi.encodePacked(_tickers_claimable[i])) == keccak256(abi.encodePacked(ticker))) {
+      if(_tickers_claimable[i] == ticker) {
         tickers_claimable[i] = _tickers_claimable[tickers_claimable.length - 1];
         break;
       }
@@ -709,18 +721,18 @@ contract Rewardeum is Ownable, IERC20 {
     tickers_claimable.pop();
     emit RemoveClaimableToken(ticker);
   }
-
-  function addCombinedOffer(address new_token, string memory ticker) external onlyOwner {
+//TODO test add/remove
+  function addCombinedOffer(address new_token, bytes32 ticker) external onlyOwner {
     combined_offer[ticker] = new_token;
     current_offers.push(ticker);
   }
 
-  function removeCombinedOffer(string memory ticker) external onlyOwner {
+  function removeCombinedOffer(bytes32 ticker) external onlyOwner {
     delete combined_offer[ticker];
 
-    string[] memory _current_offers = current_offers;
+    bytes32[] memory _current_offers = current_offers;
     for(uint i=0; i<_current_offers.length; i++) {
-      if(keccak256(abi.encodePacked(_current_offers[i])) == keccak256(abi.encodePacked(ticker))) {
+      if(_current_offers[i] == ticker) {
         current_offers[i] = _current_offers[current_offers.length - 1];
         break;
       }

@@ -1,15 +1,22 @@
-// SPDX-License-Identifier: GPL - @DrGorilla_md (Tg/Twtr)
-
+// SPDX-License-Identifier: GPL
 pragma solidity 0.8.0;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
+import "@openzeppelin/contracts/token/ERC721/Extensions/IERC721Enumerable.sol";
 import "@openzeppelin/contracts/token/ERC721/utils/ERC721Holder.sol";
 
+
+/// @title Rewardeum Vault
+/// @author DrGorilla_md (Tg/Twtr)
+/// @dev contract proxied by the main Reum contract, in order to upgrade vault to new reward mecanisms
+/// on a per-asset basis
 contract Vault is Ownable, ERC721Holder {
+
     address main_contract;
-    mapping (string => address) current_asset;
+
+    mapping (bytes32 => address) current_asset;
+    mapping (bytes32 => uint[]) NFT_tokenID;
 
     event VaultError(string);
 
@@ -17,10 +24,12 @@ contract Vault is Ownable, ERC721Holder {
         main_contract = reum;
     }
 
-    function claim(uint256 claimable,  address dest, string memory ticker) external returns (bool) {
+    /// @notice claim 
+    /// @dev this part should be updated as needed. Use of ticker as strings 
+    function claim(uint256 claimable,  address dest, bytes32 ticker) external returns (bool) {
         require(msg.sender == main_contract, "Vault: unauthorized access");
 
-        if(keccak256(abi.encodePacked(ticker)) == keccak256(abi.encodePacked("REUM"))) {
+        if(ticker == bytes32("REUM")) {
             IERC20 IReum = IERC20(main_contract);
             uint balance = IReum.balanceOf(address(this));
             try IReum.transfer(dest, balance) {
@@ -30,8 +39,9 @@ contract Vault is Ownable, ERC721Holder {
                 return false;
             }
         }
-        else if(keccak256(abi.encodePacked(ticker)) == keccak256(abi.encodePacked("NFT_TEST"))) {
-            IERC721 INFT = IERC721(current_asset["NFT_TEST"]);
+        else if(ticker == bytes32("NFT_TEST")) {
+            IERC721Enumerable INFT = IERC721Enumerable(current_asset["NFT_TEST"]);
+
             try INFT.safeTransferFrom(address(this), dest, 1) {
                 return true;
             } catch Error(string memory _err) {
@@ -41,10 +51,22 @@ contract Vault is Ownable, ERC721Holder {
         }
     }
 
-    function addAsset(string memory ticker, address asset_adr) external onlyOwner {
-        current_asset[ticker] = asset_adr;
+    function addAsset(bytes32 ticker, address asset_adr) external onlyOwner {
+        current_asset[bytes32(ticker)] = asset_adr;
     }
 
+    function syncNFTEnum(bytes32 ticker) external {
+        IERC721Enumerable INFT = IERC721Enumerable(current_asset[bytes32(ticker)]);
+        uint256 num_token = INFT.balanceOf(address(this));
+        uint256[] memory _ids = new uint256[](num_token-1);
+        for(uint i; i<num_token; i++) _ids[i] = INFT.tokenOfOwnerByIndex(address(this), i);
+        NFT_tokenID[bytes32(ticker)] = _ids;
+    }
+
+    function syncNFTNonEnum(bytes32 ticker, uint256[] memory _ids) external onlyOwner {
+        NFT_tokenID[bytes32(ticker)] = _ids;
+    }
+//TODO retrieve all
     receive () external payable {}
 
 }
