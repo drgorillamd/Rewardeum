@@ -170,6 +170,21 @@ contract("Vault.sol", accounts => {
       const quote = await x.getQuote.call('1'+'0'.repeat(18), web3.utils.asciiToHex("BTCB"));
       await truffleCost.log(x.claimReward(web3.utils.asciiToHex('BTCB'), {from: anon}));
     });
-  
   });
+
+  describe("Removing bonus to claim", () => {
+    it("Removing reum as non-combined -> revert ?", async () => {
+      await time.advanceTimeAndBlock(87000);
+      const reum = web3.utils.asciiToHex("REUM");
+      await truffleAssert.reverts(x.removeClaimable(reum, {from: accounts[0]}), "Combined Offer");
+    });
+
+    it("Removing reum as combined -> no more claim ?", async () => {
+      await time.advanceTimeAndBlock(87000);
+      const reum = web3.utils.asciiToHex("REUM");
+      await x.removeCombinedOffer(reum, {from: accounts[0]});
+      await truffleAssert.reverts(x.claimReward(reum, {from: anon}), "Claim: invalid dest token");
+    });
+  });
+
 });

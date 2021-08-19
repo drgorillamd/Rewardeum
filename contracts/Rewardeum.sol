@@ -11,10 +11,16 @@ import "@uniswap/v2-core/contracts/interfaces/IUniswapV2Pair.sol";
 
 /// @title Rewardeum - Main contract
 /// @author DrGorilla_md (Twtr/Tg)
+/// @notice ERC20 compliant token with taxes on transfer, funding a double reward pool system:
+/// - Reward pool
+/// - Reserve
+/// Every user can claim every 24h a reward, based on the share of the total supply owned. The token
+/// claimed is either BNB or any other available token (from a curated list).
+/// An additional incentive mechanism (the "Vault") offer extra reward on chosen claimable tokens.
+/// @dev this contract is custodial for BNB and $reum (swapped for BNB in batches), custom token 
+/// are swapped as needed. Main contract act as a proxy for the vault (via IVault) which is redeployed
+/// for new offers. Tickers are stored in bytes32 for gas optim (frontend integration via web3.utils.hexToAscii and asciiToHex)
 
-
-/// @dev only function which should be accessible on vault, all the logic is outsourced in vault
-/// This contract act as proxy for the vault (new offer = new vault)
 interface IVault {
   function claim(uint256 claimable, address dest, bytes32 ticker) external returns (bool);
 }
@@ -85,7 +91,7 @@ contract Rewardeum is IERC20 {
   uint public claim_ratio = 80;
   uint public gas_flat_fee = 0.000361 ether;
   uint public total_claimed;
-  uint8[5] public claiming_taxes_rates = [2, 4, 6, 8, 15];
+  uint8[5] public claiming_taxes_rates = [2, 5, 10, 20, 30];
   uint128[2] public gas_waiver_limits = [0.0001 ether, 0.0005 ether];
 
   bool public circuit_breaker;
@@ -464,13 +470,12 @@ contract Rewardeum is IERC20 {
     if(amount > 0.01 ether) return amount * claiming_taxes_rates[0] / 100;
     //if <0.01
     return 0;
-
   }
 
   /// @notice frontend integration
   function endOfWaitingTime() external view returns (uint256) {
     return _last_tx[msg.sender].last_claim + claim_periodicity;
-  } // TODO variable periodicity
+  } 
 
   /// @dev tax goes to the smartpool reserve
   function claimReward(bytes32 ticker) external {
@@ -592,10 +597,12 @@ contract Rewardeum is IERC20 {
     }
   }
 
+  /// @notice returns quote as number of token received for amount BNB
+  /// @dev returns 0 for non-claimable tokens
   function getQuote(uint256 amount, bytes32 ticker) external view returns (uint256) {
     address wbnb = WETH;
 
-    //if non-combined offer, no quote to get -> will fail
+    //combined offer ?
     address dest_token = available_tokens[ticker] == address(main_vault) ? combined_offer[ticker] : available_tokens[ticker];
     if(available_tokens[ticker] == address(0)) return 0;
     if(available_tokens[ticker] == wbnb) return amount;
@@ -611,6 +618,8 @@ contract Rewardeum is IERC20 {
     }
   }
 
+  /// @notice Check if invalid token listed as custom claim
+  /// @dev validate all custom addresses by using symbol() from ierc20
   function validateCustomTickers() external view returns (string memory) {
     for(uint i = 0; i < tickers_claimable.length; i++) {
       if(available_tokens[tickers_claimable[i]] != address(main_vault) &&
@@ -639,7 +648,7 @@ contract Rewardeum is IERC20 {
       emit TransferBNB(to, value);
   }
 
-  //@dev fallback in order to receive BNB from swapToBNB
+  /// @dev fallback in order to receive BNB from swapToBNB
   receive () external payable {}
 
 // ------------- Indiv addresses management -----------------
@@ -664,12 +673,13 @@ contract Rewardeum is IERC20 {
 
 // ---------- In case of emergency, break the glass -------------
 
-  //@dev will bypass all the taxes and act as erc20.
-  //     pools & balancer balances will remain untouched
+  /// @dev will bypass all the taxes and act as erc20.
+  ///     pools & balancer balances will remain untouched
   function setCircuitBreaker(bool status) external onlyOwner {
     circuit_breaker = status;
   }
 
+  /// @notice if token accumulated in contract, trigger a swap of all of them
   function forceSwapForReward() external onlyOwner {
     uint256 BNB_balance_before = address(this).balance;
     uint256 token_out = swapForBNB(balancer_balances.reward_pool, address(this)); //returns 0 if fail
@@ -681,8 +691,8 @@ contract Rewardeum is IERC20 {
     smartPoolCheck();
   }
 
-  //@dev set the reward (BNB) pool balance, rest of the contract's balance is the reserve
-  //will mostly (hopefully) be used on first cycle
+  /// @dev set the reward (BNB) pool balance, rest of the contract's balance is the reserve
+  /// will mostly (hopefully) be used only on first cycle
   function smartpoolOverride(uint256 reward) external onlyOwner {
     require(address(this).balance >= reward, "SPOverride: inf to contract balance");
     smart_pool_balances.BNB_reserve = address(this).balance - reward;
@@ -697,14 +707,17 @@ contract Rewardeum is IERC20 {
     emit BalancerReset(balancer_balances.reward_pool, balancer_balances.liquidity_pool);
   }
 
-
-
 //  --------------  setters ---------------------
 
+  /// @dev Vaults are deployed on a per-use basis/this is a proxy to them
   function setVault(address new_vault) external onlyOwner {
     main_vault = IVault(new_vault);
   }
 
+  /// @notice add custom token to claim
+  /// @param new_token address of the custom claim token contract
+  /// @param ticker in bytes32
+  /// @param _min_received_percents to fix the max slippage
   function addClaimable(address new_token, bytes32 ticker, uint256 _min_received_percents) external onlyOwner {
     available_tokens[ticker] = new_token;
     tickers_claimable.push(ticker);
@@ -712,7 +725,8 @@ contract Rewardeum is IERC20 {
     emit AddClaimableToken(ticker, new_token);
   }
 
-  function removeClaimable(bytes32 ticker) external onlyOwner {
+  function removeClaimable(bytes32 ticker) public onlyOwner {
+    require(combined_offer[ticker] == address(0), "Combined Offer");
     delete available_tokens[ticker];
     delete custom_claimed[ticker];
 
@@ -726,9 +740,11 @@ contract Rewardeum is IERC20 {
     tickers_claimable.pop();
     emit RemoveClaimableToken(ticker);
   }
-//TODO test add/remove
+
   function addCombinedOffer(address new_token, bytes32 ticker) external onlyOwner {
+    require(available_tokens[ticker] != address(0), "Use addClaimable first");
     combined_offer[ticker] = new_token;
+    available_tokens[ticker] = address(main_vault);
     current_offers.push(ticker);
   }
 
@@ -743,9 +759,10 @@ contract Rewardeum is IERC20 {
       }
     }
     current_offers.pop();
+    removeClaimable(ticker);
   }
 
-  //@dev default = burn
+  /// @dev default = burned
   function setLPRecipient(address _LP_recipient) external onlyOwner {
     LP_recipient = _LP_recipient;
   }

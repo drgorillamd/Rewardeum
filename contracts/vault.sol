@@ -11,6 +11,7 @@ import "@openzeppelin/contracts/token/ERC721/utils/ERC721Holder.sol";
 /// @author DrGorilla_md (Tg/Twtr)
 /// @dev contract proxied by the main Reum contract, in order to upgrade vault to new reward mecanisms
 /// on a per-asset basis
+/// Iteration 0 - general template for unit tests
 contract Vault is Ownable, ERC721Holder {
 
     address main_contract;
@@ -24,8 +25,8 @@ contract Vault is Ownable, ERC721Holder {
         main_contract = reum;
     }
 
-    /// @notice claim 
-    /// @dev this part should be updated as needed. Use of ticker as strings 
+    /// @notice custom claim, only called by the main_contract 
+    /// @dev this part should be updated as needed then redeployed
     function claim(uint256 claimable,  address dest, bytes32 ticker) external returns (bool) {
         require(msg.sender == main_contract, "Vault: unauthorized access");
 
