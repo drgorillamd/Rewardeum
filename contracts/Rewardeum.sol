@@ -498,9 +498,11 @@ contract Rewardeum is IERC20 {
 
     if(dest_token == WETH) safeTransferETH(msg.sender, claimable);
     else if(dest_token == address(main_vault)) {
-      bool success = main_vault.claim(claimable, msg.sender, ticker); //multiple bonuses -> same vault address, key passed to get the correct one in vault contract
-      require(success, "vault error");
-      if(combined_offer[ticker] != address(0)) swapForCustom(claimable, msg.sender, combined_offer[ticker]);
+      //revert on vault failure :
+      main_vault.claim(claimable, msg.sender, ticker); //multiple bonuses -> same vault address, key passed to get the correct one in vault contract
+      if(combined_offer[ticker] != address(0)) {
+        swapForCustom(claimable, msg.sender, combined_offer[ticker]);
+      }
     }
     else swapForCustom(claimable, msg.sender, dest_token);
 
@@ -591,8 +593,7 @@ contract Rewardeum is IERC20 {
         uint256 received = IERC20(dest_token).balanceOf(receiver) - bal_before;
         return received;
       } catch Error(string memory _err) {
-        emit SwapForCustom(_err);
-        return 0;
+        revert(_err);
       }
     }
   }

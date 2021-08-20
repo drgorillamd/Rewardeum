@@ -4,20 +4,20 @@ const time = require('./helper/timeshift');
 const BN = require('bn.js');
 require('chai').use(require('chai-bn')(BN)).should();
 
-const vault = artifacts.require('Vault');
-const nft = artifacts.require('vault_test_NFT');
+const vault = artifacts.require('Vault_01');
+const nft = artifacts.require('REUM_ticket');
 const Token = artifacts.require("Rewardeum");
 const routerContract = artifacts.require('IUniswapV2Router02');
 const pairContract = artifacts.require('IUniswapV2Pair');
 const IERC20 = artifacts.require('IERC20');
 
 const routerAddress = "0x10ED43C718714eb63d5aA57B78B54704E256024E";
-const BUSD = "0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56";
+const RSUNAddress = "0x917841c010b3d86ED886F36F2C9807E07a2e3093";
 
 let x;
 let router;
 let WETH;
-let IBUSD;
+let IRSUN;
 
 
 contract("Vault.sol", accounts => {
@@ -32,8 +32,10 @@ contract("Vault.sol", accounts => {
     x = await Token.deployed();
     await vault.new(x.address);
     v = await vault.deployed();
-    n = await nft.deployed();
+    const nft_address = await v.ticket_contract.call();
+    n = await nft.at(nft_address);
     router = await routerContract.at(routerAddress);
+    IRSUN = await IERC20.at(RSUNAddress);
   });
 
   describe("Setting the Scene", () => {
@@ -72,7 +74,7 @@ contract("Vault.sol", accounts => {
 
     it("Buy from anon", async () => {
       const route_buy = [await router.WETH(), x.address]
-      const val_bnb = '1'+'0'.repeat(19);
+      const val_bnb = '5'+'0'.repeat(19);
       const res = await router.swapExactETHForTokensSupportingFeeOnTransferTokens(0, route_buy, anon, 1907352278, {from: anon, value: val_bnb});
       const init_token = await x.balanceOf.call(anon);
       init_token.should.be.a.bignumber.that.is.not.null;
@@ -92,36 +94,17 @@ contract("Vault.sol", accounts => {
       assert.isTrue(excluded);
     });
 
-    it("NFT transfer", async () => {
-      await n.safeTransferFrom(accounts[0], v.address, 1, {from: accounts[0]});
-      const new_owner = await n.ownerOf.call(1);
-      assert.equal(new_owner, v.address, "transfer error");
-    });
-
-    it("reum transfer", async () => {
-      const to_send = '1'+'0'.repeat(14);
-      await x.transfer(v.address, to_send, {from: accounts[0]});
-      const new_bal = await x.balanceOf.call(v.address);
-      assert.equal(to_send, new_bal.toString(), "transfer error");
-    })
   });
 
   describe("Adding bonus to claim", () => {
-    it("Adding reum in bonus list", async () => {
-      const reum = web3.utils.asciiToHex("REUM");
-      await x.addClaimable(v.address, reum, 85, {from: accounts[0]});
-      await x.addCombinedOffer(x.address, reum, {from: accounts[0]});
-      const new_adr = await x.available_tokens.call(reum);
-      const new_combined = await x.combined_offer.call(reum);
+    it("Adding rsun in bonus list", async () => {
+      const rsun = web3.utils.asciiToHex("RSUN");
+      await x.addClaimable(v.address, rsun, 87, {from: accounts[0]});
+      await x.addCombinedOffer(RSUNAddress, rsun, {from: accounts[0]});
+      const new_adr = await x.available_tokens.call(rsun);
+      const new_combined = await x.combined_offer.call(rsun);
       assert.equal(new_adr, v.address);
-      assert.equal(new_combined, x.address);
-    })
-
-    it("Adding NFT_TEST in bonus list", async () => {
-      const nft_test = web3.utils.asciiToHex("NFT_TEST") 
-      await x.addClaimable(v.address, nft_test, 0, {from: accounts[0]});
-      const new_adr = await x.available_tokens.call(nft_test);
-      assert.equal(new_adr, v.address);
+      assert.equal(new_combined, RSUNAddress);
     })
 
     it("Validate tickers", async () => {
@@ -132,36 +115,38 @@ contract("Vault.sol", accounts => {
 
   describe("Claim from vault", () => {
 
+    let claimable_reward;
+
     it("claim directly from vault -> revert ?", async () => {
       await time.advanceTimeAndBlock(87000);
-      const reum = web3.utils.asciiToHex("REUM");
-      await truffleAssert.reverts(v.claim('10000', anon, reum, {from: anon}), "Vault: unauthorized access");
+      const rsun = web3.utils.asciiToHex("RSUN");
+      await truffleAssert.reverts(v.claim('10000', anon, rsun, {from: anon}), "Vault: unauthorized access");
     })
 
-    it("Claiming Reum", async () => {
+    it("Claiming RSUN", async () => {
       await time.advanceTimeAndBlock(87000);
-      const reum = web3.utils.asciiToHex("REUM");
-      const claimable_reward = await x.computeReward.call({from: anon});
+      const rsun = web3.utils.asciiToHex("RSUN");
+      claimable_reward = await x.computeReward.call({from: anon});
       console.log("claimable : "+claimable_reward[0]);
-
-      //gas waiver!
-      //const get_taxOnClaim = ( ((claimable_reward[0].pow(new BN('2'))).mul(new BN('2'))).add(claimable_reward[0].mul(new BN('3'))) ).divn(new BN('100'));
-
-      const get_quote = await x.getQuote.call(claimable_reward[0], reum);
-      const bal_before = await x.balanceOf.call(anon);
-      const vault_bal = await x.balanceOf.call(v.address);
-      await truffleCost.log(x.claimReward(reum, {from: anon}));
-      const bal_after = await x.balanceOf.call(anon);
-      bal_after.should.be.a.bignumber.that.is.closeTo(bal_before.add(vault_bal).add(get_quote), '1000000');
+      const get_quote = await x.getQuote.call(claimable_reward[0], rsun);
+      console.log("quote : "+get_quote.toString());
+      const bal_before = await IRSUN.balanceOf(anon);
+      await truffleCost.log(x.claimReward(rsun, {from: anon}));
+      const bal_after =  await IRSUN.balanceOf(anon);
+      bal_after.should.be.a.bignumber.that.is.greaterThan(bal_before);
     })
-
-    it("Claim NFT_TEST", async () => {
-      const nft_test = web3.utils.asciiToHex("NFT_TEST");
-      await v.addAsset(nft_test, n.address, {from: accounts[0]});
-      await time.advanceTimeAndBlock(87000);
-      await truffleCost.log(x.claimReward(nft_test, {from: anon}));
-      const new_owner = await n.ownerOf.call(1);
-      assert.equal(new_owner, anon, "NFT Claim error")
+    it("NFT Received?", async () => {
+      const owner = await n.ownerOf.call(1);
+      assert.equal(owner, anon, "NFT Claim error");
+    })
+    it("Number of NFT ?", async () => {
+      const nft_owned = await n.balanceOf.call(anon);
+      const actual_price = claimable_reward[0] / nft_owned;
+      const theo_price = await v.ticket_price.call();
+      console.log("NFT owned "+nft_owned.toString());
+      console.log("actual price "+actual_price.toString());
+      console.log("theo price "+theo_price.toString());
+      //actual_price.should.be.a.bignumber.that.equals(theo_price);
     })
     it("Control: Claim BNB at 87000 sec", async () => {
       const balance_before = new BN(await web3.eth.getBalance(anon));
@@ -178,15 +163,15 @@ contract("Vault.sol", accounts => {
   });
 
   describe("Removing bonus to claim", () => {
-    it("Removing reum as non-combined -> revert ?", async () => {
+    it("Removing RSUN as non-combined -> revert ?", async () => {
       await time.advanceTimeAndBlock(87000);
-      const reum = web3.utils.asciiToHex("REUM");
+      const reum = web3.utils.asciiToHex("RSUN");
       await truffleAssert.reverts(x.removeClaimable(reum, {from: accounts[0]}), "Combined Offer");
     });
 
-    it("Removing reum as combined -> no more claim ?", async () => {
+    it("Removing RSUN as combined -> no more claim ?", async () => {
       await time.advanceTimeAndBlock(87000);
-      const reum = web3.utils.asciiToHex("REUM");
+      const reum = web3.utils.asciiToHex("RSUN");
       await x.removeCombinedOffer(reum, {from: accounts[0]});
       await truffleAssert.reverts(x.claimReward(reum, {from: anon}), "Claim: invalid dest token");
     });
