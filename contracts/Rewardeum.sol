@@ -72,7 +72,7 @@ contract Rewardeum is IERC20 {
   uint16[3] public selling_taxes_tranches = [200, 500, 1000]; // % and div by 10000 0.012% -0.025% -(...)
 
 // ---- balancer ----
-  uint public pcs_pool_to_circ_ratio = 10;
+  uint private pcs_pool_to_circ_ratio = 10;
   uint public swap_for_liquidity_threshold = 10**13 * 10**_decimals; //1%
   uint public swap_for_reward_threshold = 10**13 * 10**_decimals;
   uint public swap_for_reserve_threshold = 10**13 * 10**_decimals;
@@ -88,7 +88,7 @@ contract Rewardeum is IERC20 {
 
 // ---- claim ----
   uint claim_periodicity = 1 days;
-  uint public claim_ratio = 80;
+  uint private claim_ratio = 80;
   uint public gas_flat_fee = 0.000361 ether;
   uint public total_claimed;
   uint8[5] public claiming_taxes_rates = [2, 5, 10, 20, 30];
@@ -106,11 +106,11 @@ contract Rewardeum is IERC20 {
   address public LP_recipient;
   address public devWallet;
   address public mktWallet;
-  address public WETH;
+  address private WETH;
 
   IVault public main_vault;
-  IUniswapV2Pair public pair;
-  IUniswapV2Router02 public router;
+  IUniswapV2Pair private pair;
+  IUniswapV2Router02 private router;
 
   prop_balances private balancer_balances;
   smartpool_struct public smart_pool_balances;
