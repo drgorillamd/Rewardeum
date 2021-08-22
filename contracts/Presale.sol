@@ -1,22 +1,23 @@
 pragma solidity 0.8.0;
 // SPDX-License-Identifier: GPL - author: @DrGorilla_md (Tg/Twtr)
 
-/* $REUM - presale and autoliq contract.
-*
-* 3 differents quotas -> whitelisted, "private" (ie any non-whitelisted address) and public
-* whitelisted and presale are independent.
-* When presale is over (owner is calling concludeAndAddLiquidity), the liquidity quota is
-* paired with appropriate amount of BNB (if not enough BNB, less token then) -> public price is the constraint
-* Claim() is then possible (AFTER the initial liquidity).
-* This contract will then remains at least a week, for late claims (it can be then, manually, destruct -> token and BNB left
-* are transfered to the multisig.
-*
-*/
+/// @author DrGorilla_md
+/// @title $REUM - presale and autoliq contract.
+/// @notice 3 differents quotas -> whitelisted, "private" (ie any non-whitelisted address) and "reserved" for public listing
+/// whitelisted and presale are independent quotas.
+/// When presale is over (owner is calling concludeAndAddLiquidity), the liquidity quota is
+/// paired with appropriate amount of BNB (if not enough BNB, less token then) -> public price is the constraint
+/// + a fixed part is transered to the main token contract as initial reward pool.
+/// Claim() is then possible (AFTER the initial liquidity is added).
+/// This contract will then remains at least a week, for late claims (it can be then, manually, destruct -> token left
+/// are transfered to the dev multisig.
 
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Router02.sol";
+import "@uniswap/v2-core/contracts/interfaces/IUniswapV2Factory.sol";
+import "@uniswap/v2-core/contracts/interfaces/IUniswapV2Pair.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 contract Reum_presale is Ownable {
 
@@ -47,6 +48,7 @@ contract Reum_presale is Ownable {
   
   IERC20 public token_interface;
   IUniswapV2Router02 router;
+  IUniswapV2Pair pair;
 
   event Buy(address, uint256, uint256);
   event LiquidityTransferred(uint256, uint256);
@@ -67,19 +69,24 @@ contract Reum_presale is Ownable {
     _;
   }
   
-  //@dev set circuit_breaker to true for the duration of the sale
-    constructor(address _router, address _token_address) {
+  /// @dev this contract should be excluded in the main contract
+  constructor(address _router, address _token_address) {
       router = IUniswapV2Router02(_router);
       require(router.WETH() != address(0), 'Router error');
+
+      IUniswapV2Factory factory = IUniswapV2Factory(router.factory());
+
+      address pair_adr = factory.getPair(router.WETH(), _token_address);
+      pair = IUniswapV2Pair(pair_adr);
+      require(pair_adr != address(0), 'Pair error');
+
       token_interface = IERC20(_token_address);
       sale_status = status.beforeSale;
   }
 
 // -- before sale --
 
-  //@dev retain whitelisting capacity during the sale (ie too much "zombies" not coming)
-  // allowance max is 2BNB, +10**18 to flag whitelisted accounts (ie non-whitelisted == 0)
-  // in claim() 
+  /// @dev retain capacity to whitelist during the sale (ie too much "zombies" not coming)
   function addWhitelist(address[] calldata _adr) external onlyOwner {
     for(uint256 i=0; i< _adr.length; i++) {
       if(whiteListed[_adr[i]] == false) {
@@ -105,8 +112,7 @@ contract Reum_presale is Ownable {
 
 // -- Presale flow --
 
-  //@dev contract starts with presale+public
-  //     will revert when quotas are emptied
+  /// @dev will revert when quotas are emptied
   function tokenLeftForPrivateSale() public view returns (uint256) {
     require(Quotas.presaleQuota >= Quotas.sold_in_private, "Private sale: No more token to sell");
     unchecked {
@@ -158,16 +164,24 @@ contract Reum_presale is Ownable {
     token_interface.transfer(msg.sender, amountToken);
   }
 
-  //@dev convert BNB received and token left in pool liquidity. LP send to owner.
-  //     Uni Router handles both scenario : existing and non-existing pair
-  //     /!\ will revert if < 1BNB in contract
-  // not in postSale scope to avoid having claim and third-party liq before calling it
-  function concludeAndAddLiquidity(uint256 portion_for_reward_in_percent) external onlyOwner {
+  /// @dev convert BNB received and token left in pool liquidity. LP send to owner.
+  ///     Uni Router handles both scenario : existing and non-existing pair
+  /// not in postSale scope to avoid having claim and third-party liq before calling it
+  /// @param portion_for_reward_in_percent % of BNB transfered to the token contract as initial reward pool
+  /// @param emergency_slippage modify the token amount desired in addLiquidity
+  /// @param correct_pair bool to trigger the "anti-pool-spam" mechanism (rebalance and atomically sync)
+  function concludeAndAddLiquidity(uint256 portion_for_reward_in_percent, uint256 emergency_slippage, bool correct_pair) external onlyOwner {
 
     address token = payable(address(token_interface));
     uint256 to_transfer = address(this).balance * portion_for_reward_in_percent / 100;
     (bool success,) = token.call{value: to_transfer}(new bytes(0));
     require(success, 'TransferHelper: ETH_TRANSFER_FAILED');
+
+    if(address(pair).balance > 0 && correct_pair) {
+      uint256 to_add = address(pair).balance * public_token_per_BNB;
+      token_interface.transfer(address(pair), to_add);
+      pair.sync();
+    }
 
     uint256 balance_BNB = address(this).balance;
     uint256 balance_token = token_interface.balanceOf(address(this));
@@ -180,12 +194,12 @@ contract Reum_presale is Ownable {
       else { // too much BNB for token left
         balance_BNB = balance_token / public_token_per_BNB;
       }
-
+    
     token_interface.approve(address(router), balance_token);
     router.addLiquidityETH{value: balance_BNB}(
         address(token_interface),
         balance_token,
-        balance_token,
+        balance_token - (balance_token * emergency_slippage / 100),
         balance_BNB,
         address(0x000000000000000000000000000000000000dEaD), //liquidity tokens are burned
         block.timestamp
@@ -195,7 +209,7 @@ contract Reum_presale is Ownable {
     presale_end_ts = block.timestamp;
     
     //safeTransfer
-    address to = payable(0x0DCDfcEaA329fDeb9025cdAED5c91B09D1417E93);  //multisig
+    address to = payable(0x0DCDfcEaA329fDeb9025cdAED5c91B09D1417E93);  //multisig (should be 0)
     (bool success2,) = to.call{value: address(this).balance}(new bytes(0));
     require(success2, 'TransferHelper: ETH_TRANSFER_FAILED');
 
@@ -203,8 +217,8 @@ contract Reum_presale is Ownable {
       
   }
 
-//@dev wait min 1 week after presale ending, for "late claimers", before destroying the
-//contract and emptying it.
+/// @dev wait min 1 week after presale ending, for "late claimers", before destroying the
+/// contract and emptying it.
   function finalClosure(address leftover_dest) external onlyOwner {
     require(block.timestamp >= presale_end_ts + 604800, "finalClosure: grace period");
 

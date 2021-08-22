@@ -6,7 +6,7 @@ import "@openzeppelin/contracts/token/ERC721/extensions/ERC721Enumerable.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
 
-/// @title Rewardeum Vault v01
+/// @title Rewardeum Lottery Ticket
 /// @author DrGorilla_md (Tg/Twtr)
 /// @notice NFT Lottery ticket for the first Rewardeum Vault iteration
 /// @dev inherit the abstract contract ERC721Enumerable to have tokenOfOwnerByIndex() and totalSupply()

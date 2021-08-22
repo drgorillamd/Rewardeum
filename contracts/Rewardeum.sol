@@ -109,7 +109,7 @@ contract Rewardeum is IERC20 {
   address private WETH;
 
   IVault public main_vault;
-  IUniswapV2Pair private pair;
+  IUniswapV2Pair public pair;
   IUniswapV2Router02 private router;
 
   prop_balances private balancer_balances;
