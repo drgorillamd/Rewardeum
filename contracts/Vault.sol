@@ -27,27 +27,27 @@ contract Vault is Ownable, ERC721Holder {
 
     /// @notice custom claim, only called by the main_contract 
     /// @dev this part should be updated as needed then redeployed
-    function claim(uint256 claimable,  address dest, bytes32 ticker) external returns (bool) {
+    function claim(uint256 claimable,  address dest, bytes32 ticker) external returns (uint256 claim_consumed) {
         require(msg.sender == main_contract, "Vault: unauthorized access");
 
         if(ticker == bytes32("REUM")) {
             IERC20 IReum = IERC20(main_contract);
             uint balance = IReum.balanceOf(address(this));
             try IReum.transfer(dest, balance) {
-                return true;
+                return 1000;
             } catch Error(string memory _err) {
                 emit VaultError(_err);
-                return false;
+                return 0;
             }
         }
         else if(ticker == bytes32("NFT_TEST")) {
             IERC721Enumerable INFT = IERC721Enumerable(current_asset["NFT_TEST"]);
 
             try INFT.safeTransferFrom(address(this), dest, 1) {
-                return true;
+                return 1000;
             } catch Error(string memory _err) {
                 emit VaultError(_err);
-                return false;
+                return 0;
             }
         }
     }
@@ -67,7 +67,7 @@ contract Vault is Ownable, ERC721Holder {
     function syncNFTNonEnum(bytes32 ticker, uint256[] memory _ids) external onlyOwner {
         NFT_tokenID[bytes32(ticker)] = _ids;
     }
-//TODO retrieve all
+//TODO retrieve all, if needed
     receive () external payable {}
 
 }

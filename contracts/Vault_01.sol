@@ -9,7 +9,7 @@ import "./REUM_ticket.sol";
 /// @author DrGorilla_md (Tg/Twtr)
 /// @notice vault: minting lottery tickets to win $rsun NFT
 /// @dev contract proxied by the main Reum contract, in order to upgrade vault to new reward mecanisms
-/// on a per-asset basis
+/// on a per-asset basis.
 /// Iteration 01 - $RSUN partnership: lottery tickets for RSUN NFT
 contract Vault_01 is Ownable {
 
@@ -24,13 +24,14 @@ contract Vault_01 is Ownable {
 
     /// @notice custom claim, only called by the main_contract 
     /// @dev this part is updated as needed then redeployed/proxied by main
-    function claim(uint256 claimable,  address dest, bytes32 ticker) external returns (bool) {
+    function claim(uint256 claimable,  address dest, bytes32 ticker) external returns (uint256) {
         require(msg.sender == main_contract, "Vault: unauthorized access");
 
         if(ticker == bytes32("RSUN")) {
             uint256 NFT_claimable = claimable / ticket_price;
-            if(NFT_claimable > 0) ticket_contract.mintTicket(dest, NFT_claimable);
-            return true;
+            if(NFT_claimable > 0 && ticket_contract.isRunning()) ticket_contract.mintTicket(dest, NFT_claimable);
+            //if no more ticket, still processing the claim $rsun (in main)
+            return 0; //all the claimable amount remains
         }
 
         else revert("Vault: Invalid ticker");
@@ -38,6 +39,10 @@ contract Vault_01 is Ownable {
 
     function pending_tickets(uint256 amount_claimable) external view returns (uint256) {
         return amount_claimable / ticket_price;
+    }
+
+    function stop() external onlyOwner {
+        ticket_contract.hardStop();
     }
 
     receive () external payable {

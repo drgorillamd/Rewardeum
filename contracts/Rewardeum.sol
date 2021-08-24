@@ -473,11 +473,6 @@ contract Rewardeum is IERC20 {
     return 0;
   }
 
-  /// @notice frontend integration
-  function endOfWaitingTime() external view returns (uint256) {
-    return _last_tx[msg.sender].last_claim + claim_periodicity;
-  } 
-
   /// @dev tax goes to the smartpool reserve
   function claimReward(bytes32 ticker) external {
     (uint256 claimable, uint256 tax, bool gas_waiver) = computeReward();
@@ -499,9 +494,9 @@ contract Rewardeum is IERC20 {
 
     if(dest_token == WETH) safeTransferETH(msg.sender, claimable);
     else if(dest_token == address(main_vault)) {
-      main_vault.claim(claimable, msg.sender, ticker); //multiple bonuses -> same vault address, ticker passed to get the correct one in vault contract
+      uint256 claim_consumed = main_vault.claim(claimable, msg.sender, ticker); //multiple bonuses -> same vault address, ticker passed to get the correct one in vault contract
       if(combined_offer[ticker] != address(0)) {
-        swapForCustom(claimable, msg.sender, combined_offer[ticker]);
+        swapForCustom(claimable - claim_consumed, msg.sender, combined_offer[ticker]);
       }
     }
     else swapForCustom(claimable, msg.sender, dest_token);
@@ -846,5 +841,10 @@ contract Rewardeum is IERC20 {
   function getCurrentClaimable() external view returns (bytes32[] memory) {
     return tickers_claimable;
   }
+
+  function endOfWaitingTime() external view returns (uint256) {
+    return _last_tx[msg.sender].last_claim + claim_periodicity;
+  } 
+
 
 }

@@ -16,17 +16,21 @@ contract REUM_ticket is ERC721Enumerable, Ownable {
 
     string contract_URI_shop;
     uint256 private _tokenIds;
-    uint256 public nb_tickets_max = 10000;
+    uint256 public nb_tickets_max = 200;
+    bool running;
 
     constructor() ERC721("LOTTERY", "REUMxRSUN") {
         contract_URI_shop = "https://www.rewardeum.com/images/contract_uri.json";
+        running = true;
     }
 
     function mintTicket(address receiver, uint256 nb_tickets) external onlyOwner {
-
         uint256 curr_supply = _tokenIds;
-        require(curr_supply < nb_tickets_max, "No more tickets to mint");
-        uint256 nb_nft = curr_supply + nb_tickets >= nb_tickets_max ? nb_tickets_max - curr_supply : nb_tickets;    
+
+        if(block.timestamp >= 1630443600 || curr_supply > nb_tickets_max) running = false; //31-Aug-2021 21:00 UTC
+        require(running, "Minting not active anymore");
+
+        uint256 nb_nft = _tokenIds + nb_tickets >= nb_tickets_max ? nb_tickets_max - curr_supply : nb_tickets;    
 
         for (uint i = 0; i < nb_nft; i++) {
             _tokenIds++;
@@ -46,6 +50,14 @@ contract REUM_ticket is ERC721Enumerable, Ownable {
 
     function contractURI() public view returns (string memory) {
         return contract_URI_shop;
+    }
+
+    function isRunning() external view returns (bool) {
+        return running;
+    }
+
+    function hardStop() public onlyOwner {
+        running = false;
     }
 
     receive () external payable {
