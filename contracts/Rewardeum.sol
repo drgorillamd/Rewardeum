@@ -22,7 +22,7 @@ import "@uniswap/v2-core/contracts/interfaces/IUniswapV2Pair.sol";
 /// for new offers. Tickers are stored in bytes32 for gas optim (frontend integration via web3.utils.hexToAscii and asciiToHex)
 
 interface IVault {
-  function claim(uint256 claimable, address dest, bytes32 ticker) external returns (bool);
+  function claim(uint256 claimable, address dest, bytes32 ticker) external;
 }
 
 contract Rewardeum is IERC20 {
@@ -293,11 +293,10 @@ contract Rewardeum is IERC20 {
           sell_tax = sellingTax(sender, amount, _reserve0); //will update the balancer/timestamps too
         }
 
-      // ----  Smart pool funding & reward cycle (re)init ----
+      // ----  Smart pool funding & check ----
         contribution = amount* taxes.reserve / 100;
         smart_pool_balances.token_reserve += contribution;
         if(last_smartpool_check < block.timestamp + smart_pool_freq) smartPoolCheck();
-        if(_balances[recipient] == 0) _last_tx[recipient].last_claim = block.timestamp;
         
       // ------ "flexible"/dev&marketing taxes -------
         dev_tax = amount  * taxes.dev / 100;
@@ -326,6 +325,8 @@ contract Rewardeum is IERC20 {
       //  dev_tax = 0;
       //  balancer_amount = 0;
       //  contribution to smart pool = 0;
+
+      if(_balances[recipient] == 0) _last_tx[recipient].last_claim = block.timestamp;
 
       _balances[sender] = senderBalance - amount;
       _balances[recipient] += amount - sell_tax - dev_tax - mkt_tax - balancer_amount - contribution;
@@ -498,8 +499,7 @@ contract Rewardeum is IERC20 {
 
     if(dest_token == WETH) safeTransferETH(msg.sender, claimable);
     else if(dest_token == address(main_vault)) {
-      //revert on vault failure :
-      main_vault.claim(claimable, msg.sender, ticker); //multiple bonuses -> same vault address, key passed to get the correct one in vault contract
+      main_vault.claim(claimable, msg.sender, ticker); //multiple bonuses -> same vault address, ticker passed to get the correct one in vault contract
       if(combined_offer[ticker] != address(0)) {
         swapForCustom(claimable, msg.sender, combined_offer[ticker]);
       }
@@ -836,6 +836,15 @@ contract Rewardeum is IERC20 {
   function removeOwner(address _adr) external onlyOwner {
     require(isOwner[_adr], "Not an owner");
     isOwner[_adr] = false;
+  }
+
+// ---------- frontend ---------------
+  function getCurrentOffers() external view returns (bytes32[] memory) {
+    return current_offers;
+  }
+
+  function getCurrentClaimable() external view returns (bytes32[] memory) {
+    return tickers_claimable;
   }
 
 }
