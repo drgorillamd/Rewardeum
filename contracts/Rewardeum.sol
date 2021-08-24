@@ -22,7 +22,7 @@ import "@uniswap/v2-core/contracts/interfaces/IUniswapV2Pair.sol";
 /// for new offers. Tickers are stored in bytes32 for gas optim (frontend integration via web3.utils.hexToAscii and asciiToHex)
 
 interface IVault {
-  function claim(uint256 claimable, address dest, bytes32 ticker) external;
+  function claim(uint256 claimable, address dest, bytes32 ticker) external returns (uint256 claim_consumed);
 }
 
 contract Rewardeum is IERC20 {
