@@ -44,7 +44,7 @@ contract Reum_presale is Ownable {
     uint128 sold_in_whitelist;
   }
 
-  track private Quotas = track(80 * 10**12 * 10**9, 180 * 10**12 * 10**9, 327 * 10**12 * 10**9, 0, 0);
+  track public Quotas = track(80 * 10**12 * 10**9, 180 * 10**12 * 10**9, 327 * 10**12 * 10**9, 0, 0);
   
   IERC20 public token_interface;
   IUniswapV2Router02 router;
