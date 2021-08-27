@@ -1,5 +1,7 @@
 ## Rewardeum(REUM)
 
+Todo: test for claim in wbnb are failing due to claim<gas, todo increase claimable to avoid false pos 
+
 # Main contract: Rewardeum.sol
 
 ERC20 compliant token with taxes on transfer, funding a double reward pool system:
