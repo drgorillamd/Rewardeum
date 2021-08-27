@@ -111,3 +111,4 @@ build/contracts/projectX.json
 ._.DS_Store
 data/
 frontend/
+package-lock.json
