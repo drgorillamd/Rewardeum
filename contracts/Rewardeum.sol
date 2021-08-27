@@ -25,6 +25,7 @@ interface IVault {
   function claim(uint256 claimable, address dest, bytes32 ticker) external returns (uint256 claim_consumed);
 }
 
+/// @dev part of erc20 but not part of erc20 ...
 interface IDec {
   function decimals() external view returns (uint8);
 }
