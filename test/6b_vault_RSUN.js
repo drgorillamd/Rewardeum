@@ -99,8 +99,7 @@ contract("Vault.sol", accounts => {
   describe("Adding bonus to claim", () => {
     it("Adding rsun in bonus list", async () => {
       const rsun = web3.utils.asciiToHex("RSUN");
-      await x.addClaimable(v.address, rsun, 87, {from: accounts[0]});
-      await x.addCombinedOffer(RSUNAddress, rsun, {from: accounts[0]});
+      await x.addCombinedOffer(RSUNAddress, rsun, 87, {from: accounts[0]});
       const new_adr = await x.available_tokens.call(rsun);
       const new_combined = await x.combined_offer.call(rsun);
       assert.equal(new_adr, v.address);
@@ -128,8 +127,8 @@ contract("Vault.sol", accounts => {
       const rsun = web3.utils.asciiToHex("RSUN");
       claimable_reward = await x.computeReward.call({from: anon});
       console.log("claimable : "+claimable_reward[0]);
-      const get_quote = await x.getQuote.call(claimable_reward[0], rsun);
-      console.log("quote : "+get_quote.toString());
+      const get_quote = await x.getQuote.call(rsun);
+      console.log("quote : "+get_quote[0].toString()+" decimals : "+get_quote[1].toString());
       const bal_before = await IRSUN.balanceOf(anon);
       await truffleCost.log(x.claimReward(rsun, {from: anon}));
       const bal_after =  await IRSUN.balanceOf(anon);
@@ -157,7 +156,6 @@ contract("Vault.sol", accounts => {
     });
     it("Control: Claim BTCB after 87000", async () => { 
       await time.advanceTimeAndBlock(87000);
-      const quote = await x.getQuote.call('1'+'0'.repeat(18), web3.utils.asciiToHex("BTCB"));
       await truffleCost.log(x.claimReward(web3.utils.asciiToHex('BTCB'), {from: anon}));
     });
   });

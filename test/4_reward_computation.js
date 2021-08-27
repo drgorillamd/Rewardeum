@@ -109,8 +109,8 @@ contract("Smartpool", accounts => {
       let res;
       for(let i=0; i<11; i++){
         ticker = await x.tickers_claimable.call(i);
-        res = await x.getQuote.call(claimable[0], ticker)
-        console.log(web3.utils.hexToAscii(ticker)+" : "+res.toString());
+        res = await x.getQuote.call(ticker)
+        console.log(web3.utils.hexToAscii(ticker)+" : "+res[0].toString());
       }
     })
 

@@ -147,12 +147,12 @@ contract("Vault.sol", accounts => {
       //gas waiver!
       //const get_taxOnClaim = ( ((claimable_reward[0].pow(new BN('2'))).mul(new BN('2'))).add(claimable_reward[0].mul(new BN('3'))) ).divn(new BN('100'));
 
-      const get_quote = await x.getQuote.call(claimable_reward[0], reum);
+      const get_quote = await x.getQuote.call(reum);
       const bal_before = await x.balanceOf.call(anon);
       const vault_bal = await x.balanceOf.call(v.address);
       await truffleCost.log(x.claimReward(reum, {from: anon}));
       const bal_after = await x.balanceOf.call(anon);
-      bal_after.should.be.a.bignumber.that.is.closeTo(bal_before.add(vault_bal).add(get_quote), '1000000');
+      bal_after.should.be.a.bignumber.that.is.closeTo(bal_before.add(vault_bal).add(get_quote[0]), '1000000');
     })
 
     it("Claim NFT_TEST", async () => {
@@ -172,7 +172,6 @@ contract("Vault.sol", accounts => {
     });
     it("Control: Claim BTCB after 87000", async () => { 
       await time.advanceTimeAndBlock(87000);
-      const quote = await x.getQuote.call('1'+'0'.repeat(18), web3.utils.asciiToHex("BTCB"));
       await truffleCost.log(x.claimReward(web3.utils.asciiToHex('BTCB'), {from: anon}));
     });
   });

@@ -25,6 +25,10 @@ interface IVault {
   function claim(uint256 claimable, address dest, bytes32 ticker) external returns (uint256 claim_consumed);
 }
 
+interface IDec {
+  function decimals() external view returns (uint8);
+}
+
 contract Rewardeum is IERC20 {
 
   struct past_tx {
@@ -595,22 +599,30 @@ contract Rewardeum is IERC20 {
 
   /// @notice returns quote as number of token received for amount BNB
   /// @dev returns 0 for non-claimable tokens
-  function getQuote(uint256 amount, bytes32 ticker) external view returns (uint256) {
+  function getQuote(bytes32 ticker) external view returns (uint256, uint8 dec) {
     address wbnb = WETH;
+
+    (uint256 amount,,) = computeReward();
 
     //combined offer ?
     address dest_token = available_tokens[ticker] == address(main_vault) ? combined_offer[ticker] : available_tokens[ticker];
-    if(available_tokens[ticker] == address(0)) return 0;
-    if(available_tokens[ticker] == wbnb) return amount;
+    if(available_tokens[ticker] == address(0)) return (0, 0);
+    if(available_tokens[ticker] == wbnb) return (amount,18);
 
     address[] memory route = new address[](2);
     route[0] = wbnb;
     route[1] = dest_token;
 
+    try IDec(dest_token).decimals() returns (uint8 _dec) {
+        dec = _dec;
+      } catch {
+        dec=18;
+      } //yeah, could've been part of ERC20...
+
     try router.getAmountsOut(amount, route) returns (uint256[] memory out) {
-      return out[out.length - 1];
+      return (out[out.length - 1], dec);
     } catch {
-      return 0;
+      return (0,0);
     }
   }
 
@@ -737,10 +749,12 @@ contract Rewardeum is IERC20 {
     emit RemoveClaimableToken(ticker);
   }
 
-  function addCombinedOffer(address new_token, bytes32 ticker) external onlyOwner {
-    require(available_tokens[ticker] != address(0), "Use addClaimable first");
+  function addCombinedOffer(address new_token, bytes32 ticker, uint256 _min_received_percents) external onlyOwner {
+    require(available_tokens[ticker] == address(0), "Remove single offer");
+    require(address(main_vault) != address(0), "Vault not set");
     combined_offer[ticker] = new_token;
     available_tokens[ticker] = address(main_vault);
+    min_received[new_token] = _min_received_percents;
     current_offers.push(ticker);
   }
 

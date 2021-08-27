@@ -63,15 +63,15 @@ module.exports = {
       provider: () => new Provider(key, `https://bsc-dataseed1.binance.org`),
       network_id: 56,
       confirmations: 5,
-      timeoutBlocks: 200,
+      timeoutBlocks: 2000,
       skipDryRun: true,
       gas: 20000000
     },
     testnet: {
-      provider: () => new Provider(key_testnet, `https://data-seed-prebsc-1-s1.binance.org:8545`),
+      provider: () => new Provider(key_testnet, `https://data-seed-prebsc-1-s1.binance.org:8545/`),
       network_id: 97,
-      confirmations: 5,
-      timeoutBlocks: 200,
+      confirmations: 2,
+      timeoutBlocks: 2000,
       skipDryRun: true,
       gas: 20000000
     },
