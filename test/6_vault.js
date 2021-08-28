@@ -148,7 +148,7 @@ contract("Vault.sol", accounts => {
       //gas waiver!
       //const get_taxOnClaim = ( ((claimable_reward[0].pow(new BN('2'))).mul(new BN('2'))).add(claimable_reward[0].mul(new BN('3'))) ).divn(new BN('100'));
 
-      const get_quote = await x.getQuote.call(reum);
+      const get_quote = await x.getQuote.call(reum, {from: anon});
       console.log("Reum quote : "+ get_quote[0].toString())
       const bal_before = await x.balanceOf.call(anon);
       const vault_bal = await x.balanceOf.call(v.address);
