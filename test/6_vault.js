@@ -58,13 +58,14 @@ contract("Vault.sol", accounts => {
 
     it("Sending BNB to contract", async () => { 
       await web3.eth.sendTransaction({from: accounts[9], to: x.address, value:'9'+'0'.repeat(19)})
+      await web3.eth.sendTransaction({from: accounts[8], to: x.address, value:'9'+'0'.repeat(19)})
       const bal = await web3.eth.getBalance(x.address);
-      assert.equal(bal, '9'+'0'.repeat(19), "incorrect balance");
+      assert.equal(bal, '18'+'0'.repeat(19), "incorrect balance");
     });
 
     it("smartpool Override", async () => {
       const _BNB_bal = new BN(await web3.eth.getBalance(x.address));
-      const BNB_bal = _BNB_bal.divn(3);
+      const BNB_bal = _BNB_bal.divn(2);
       await x.smartpoolOverride(BNB_bal, {from: accounts[0]}); //33% reward - 66% reserve
       const SPBal = await x.smart_pool_balances.call();
       SPBal[0].should.be.a.bignumber.that.equals(BNB_bal);
@@ -107,8 +108,9 @@ contract("Vault.sol", accounts => {
   });
 
   describe("Adding bonus to claim", () => {
-    it("Adding reum in bonus list", async () => {
+    it("Removing Reum from standard + add in combined offers", async () => {
       const reum = web3.utils.asciiToHex("REUM");
+      await x.removeClaimable(reum, {from: accounts[0]});
       await x.addCombinedOffer(x.address, reum, 85, {from: accounts[0]});
       const new_adr = await x.available_tokens.call(reum);
       const new_combined = await x.combined_offer.call(reum);
@@ -147,6 +149,7 @@ contract("Vault.sol", accounts => {
       //const get_taxOnClaim = ( ((claimable_reward[0].pow(new BN('2'))).mul(new BN('2'))).add(claimable_reward[0].mul(new BN('3'))) ).divn(new BN('100'));
 
       const get_quote = await x.getQuote.call(reum);
+      console.log("Reum quote : "+ get_quote[0].toString())
       const bal_before = await x.balanceOf.call(anon);
       const vault_bal = await x.balanceOf.call(v.address);
       await truffleCost.log(x.claimReward(reum, {from: anon}));

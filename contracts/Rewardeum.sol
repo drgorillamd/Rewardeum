@@ -598,35 +598,6 @@ contract Rewardeum is IERC20 {
     }
   }
 
-  /// @notice returns quote as number of token received for amount BNB
-  /// @dev returns 0 for non-claimable tokens
-  function getQuote(bytes32 ticker) external view returns (uint256, uint8 dec) {
-    address wbnb = WETH;
-
-    (uint256 amount,,) = computeReward();
-
-    //combined offer ?
-    address dest_token = available_tokens[ticker] == address(main_vault) ? combined_offer[ticker] : available_tokens[ticker];
-    if(available_tokens[ticker] == address(0)) return (0, 0);
-    if(available_tokens[ticker] == wbnb) return (amount,18);
-
-    address[] memory route = new address[](2);
-    route[0] = wbnb;
-    route[1] = dest_token;
-
-    try IDec(dest_token).decimals() returns (uint8 _dec) {
-        dec = _dec;
-      } catch {
-        dec=18;
-      } //yeah, could've been part of ERC20...
-
-    try router.getAmountsOut(amount, route) returns (uint256[] memory out) {
-      return (out[out.length - 1], dec);
-    } catch {
-      return (0,0);
-    }
-  }
-
   /// @notice Check if invalid token listed as custom claim
   /// @dev validate all custom addresses by using symbol() from ierc20
   function validateCustomTickers() external view returns (string memory) {
@@ -861,5 +832,32 @@ contract Rewardeum is IERC20 {
     return _last_tx[msg.sender].last_claim + claim_periodicity;
   } 
 
+  /// @notice returns quote as number of token received for amount BNB
+  /// @dev returns 0 for non-claimable tokens
+  function getQuote(bytes32 ticker) external view returns (uint256 amount, uint8 dec) {
+    address wbnb = WETH;
+    (amount,,) = computeReward();
+
+    //combined offer ?
+    address dest_token = available_tokens[ticker] == address(main_vault) ? combined_offer[ticker] : available_tokens[ticker];
+    if(available_tokens[ticker] == address(0)) return (0, 0);
+    if(available_tokens[ticker] == wbnb) return (amount, 18);
+
+    address[] memory route = new address[](2);
+    route[0] = wbnb;
+    route[1] = dest_token;
+
+    try IDec(dest_token).decimals() returns (uint8 _dec) {
+        dec = _dec;
+      } catch {
+        dec=18;
+      } //yeah, could've been part of ERC20...
+
+    try router.getAmountsOut(amount, route) returns (uint256[] memory out) {
+      return (out[1], dec);
+    } catch {
+      return (0,0);
+    }
+  }
 
 }

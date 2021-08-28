@@ -100,29 +100,31 @@ contract("Smartpool", accounts => {
       console.log("reserve BNB : "+SPBal[1].toString());
       console.log("prev reward BNB : "+SPBal[2].toString());
       console.log("reserve token : "+SPBal[3].toString());
+      await time.advanceTimeAndBlock(86401);
     });
 
-    it("Quote at +24h", async () => {
-      await time.advanceTimeAndBlock(86401);
+    it("Quotes at +24h", async () => {
       const claimable = await x.computeReward.call({from: anon});
       console.log("claimable : " + claimable[0]);
       let ticker;
       let res;
       for(let i=0; i<11; i++){
         ticker = await x.tickers_claimable.call(i);
-        res = await x.getQuote.call(ticker)
+        res = await x.getQuote.call(ticker, {from: anon})
         console.log(web3.utils.hexToAscii(ticker)+" : "+res[0].toString());
       }
     })
 
-    it("Claim at +24h", async () => {
+    it("Quote+Claim BNB at +24h", async () => {
       const bal_before = new BN(await web3.eth.getBalance(anon));
       const claimable = await x.computeReward.call({from: anon});
+      const quote_preclaim = await x.getQuote(web3.utils.asciiToHex('WBNB'), {from: anon});
       await truffleCost.log(x.claimReward(web3.utils.asciiToHex('WBNB'), {from: anon}));
       reserve = reserve.add(claimable[1]);
       const bal_after = new BN(await web3.eth.getBalance(anon));
       amount_claimed = bal_after.sub(bal_before);
       bal_after.should.be.a.bignumber.greaterThan(bal_before);
+      amount_claimed.should.be.a.bignumber.that.is.closeTo(quote_preclaim[0], '3000000000000000'); // 0.003 gas
     });
 
     it("SP: reserve", async () => {
@@ -144,15 +146,16 @@ contract("Smartpool", accounts => {
 
     });
 
-    it("Claim at +22+24h", async () => {
+    it("Quote+Claim BNB at +22+24h", async () => {
       await time.advanceTimeAndBlock(86410);
       const bal_before = new BN(await web3.eth.getBalance(anon));
-      const claimable = await x.computeReward.call({from: anon});
+      const quote_preclaim = await x.getQuote(web3.utils.asciiToHex('WBNB'), {from: anon});
       await x.claimReward(web3.utils.asciiToHex('WBNB'), {from: anon});
       const bal_after = new BN(await web3.eth.getBalance(anon));
       bal_after.should.be.a.bignumber.greaterThan(bal_before);
       const new_amount_claimed = bal_after.sub(bal_before);
       new_amount_claimed.should.be.a .bignumber.greaterThan(amount_claimed);
+      new_amount_claimed.should.be.a.bignumber.that.is.closeTo(quote_preclaim[0], '3000000000000000'); // 0.003 gas
     });
 
     it("SP: reserve", async () => {
@@ -163,15 +166,17 @@ contract("Smartpool", accounts => {
       console.log("reserve token : "+SPBal[3].toString());
     });
 
-    it("Claim at +22+24h", async () => {
+    it("Quote+Claim BNB at +22+24h", async () => {
       await time.advanceTimeAndBlock(86410);
       const bal_before = new BN(await web3.eth.getBalance(anon));
-      const claimable = await x.computeReward.call({from: anon});
+      const quote_preclaim = await x.getQuote(web3.utils.asciiToHex('WBNB'), {from: anon});
+      
       await x.claimReward(web3.utils.asciiToHex('WBNB'), {from: anon});
       const bal_after = new BN(await web3.eth.getBalance(anon));
       bal_after.should.be.a.bignumber.greaterThan(bal_before);
       const new_amount_claimed = bal_after.sub(bal_before);
       new_amount_claimed.should.be.a .bignumber.greaterThan(amount_claimed);
+      new_amount_claimed.should.be.a.bignumber.that.is.closeTo(quote_preclaim[0], '3000000000000000'); // 0.003 gas
     });
 
     it("SP: reserve", async () => {
@@ -182,15 +187,16 @@ contract("Smartpool", accounts => {
       console.log("reserve token : "+SPBal[3].toString());
     });
 
-    it("Claim at +22+24h", async () => {
+    it("Quote+Claim BNB at +22+24h", async () => {
       await time.advanceTimeAndBlock(86410);
       const bal_before = new BN(await web3.eth.getBalance(anon));
-      const claimable = await x.computeReward.call({from: anon});
+      const quote_preclaim = await x.getQuote(web3.utils.asciiToHex('WBNB'), {from: anon});
       await x.claimReward(web3.utils.asciiToHex('WBNB'), {from: anon});
       const bal_after = new BN(await web3.eth.getBalance(anon));
       bal_after.should.be.a.bignumber.greaterThan(bal_before);
       const new_amount_claimed = bal_after.sub(bal_before);
       new_amount_claimed.should.be.a .bignumber.greaterThan(amount_claimed);
+      new_amount_claimed.should.be.a.bignumber.that.is.closeTo(quote_preclaim[0], '3000000000000000'); // 0.003 gas
     });
 
     it("SP: reserve", async () => {
