@@ -99,7 +99,7 @@ contract("Presale-contract", accounts => {
         it("Liquidity + closing + transfer to reward", async () => {
             const t = await Token.deployed();
             const sale = await Presale.deployed();
-            await truffleCost.log(sale.concludeAndAddLiquidity(50, {from:deployer})); 
+            await truffleCost.log(sale.concludeAndAddLiquidity(50, 0, false, accounts[0], {from:deployer})); 
             const pairAdr = await t.pair.call();
             const pair = await pairContract.at(pairAdr);
             const LPBalance = await pair.balanceOf.call(deployer);

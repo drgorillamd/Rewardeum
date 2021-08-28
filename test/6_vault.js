@@ -109,8 +109,7 @@ contract("Vault.sol", accounts => {
   describe("Adding bonus to claim", () => {
     it("Adding reum in bonus list", async () => {
       const reum = web3.utils.asciiToHex("REUM");
-      await x.addClaimable(v.address, reum, 85, {from: accounts[0]});
-      await x.addCombinedOffer(x.address, reum, {from: accounts[0]});
+      await x.addCombinedOffer(x.address, reum, 85, {from: accounts[0]});
       const new_adr = await x.available_tokens.call(reum);
       const new_combined = await x.combined_offer.call(reum);
       assert.equal(new_adr, v.address);

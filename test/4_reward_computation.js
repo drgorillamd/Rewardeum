@@ -50,15 +50,16 @@ contract("Smartpool", accounts => {
     });
 
     it("Sending BNB to contract", async () => { 
-      await web3.eth.sendTransaction({from: accounts[9], to: x.address, value:'9'+'0'.repeat(19)})
+      await web3.eth.sendTransaction({from: accounts[9], to: x.address, value:'9'+'0'.repeat(19)});
+      await web3.eth.sendTransaction({from: accounts[8], to: x.address, value:'9'+'0'.repeat(19)});
       const bal = await web3.eth.getBalance(x.address);
-      assert.equal(bal, '9'+'0'.repeat(19), "incorrect balance");
+      assert.equal(bal, '18'+'0'.repeat(19), "incorrect balance");
     });
 
     it("smartpool Override", async () => {
       const _BNB_bal = new BN(await web3.eth.getBalance(x.address));
-      const BNB_bal = _BNB_bal.divn(3);
-      await x.smartpoolOverride(BNB_bal, {from: accounts[0]}); //33% reward - 66% reserve
+      const BNB_bal = _BNB_bal.divn(2);
+      await x.smartpoolOverride(BNB_bal, {from: accounts[0]}); //50% reward - 50% reserve
       const SPBal = await x.smart_pool_balances.call();
       reserve = SPBal[1];
       SPBal[0].should.be.a.bignumber.that.equals(BNB_bal);

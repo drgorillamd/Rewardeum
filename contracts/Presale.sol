@@ -36,6 +36,9 @@ contract Reum_presale is Ownable {
   uint256 public presale_token_per_BNB = 500;  //pre-sale price (500b/1BNB) AKA (500*10**9*10**9)/10**18
   uint256 public public_token_per_BNB = 400; //public pancake listing (400b/1BNB)
 
+  uint256 public total_bought;
+  uint256 public total_claimed;
+
   struct track {
     uint128 whiteQuota;      //80 * 10**12 * 10**9; 80T whitelist
     uint128 presaleQuota;    //180 * 10**12 * 10**9; 180T presale
@@ -143,6 +146,7 @@ contract Reum_presale is Ownable {
     }
 
     amountBought[msg.sender] = amountBought[msg.sender] + msg.value;
+    total_bought += amountToken;
     emit Claimable(msg.sender, msg.value, amountToken);
   }
 
@@ -161,6 +165,7 @@ contract Reum_presale is Ownable {
     require(amountBought[msg.sender] > 0, "0 tokens to claim");
     uint256 amountToken = presale_token_per_BNB * amountBought[msg.sender];
     amountBought[msg.sender] = 0;
+    total_claimed += amountToken;
     token_interface.transfer(msg.sender, amountToken);
   }
 
@@ -169,15 +174,16 @@ contract Reum_presale is Ownable {
   /// not in postSale scope to avoid having claim and third-party liq before calling it
   /// @param portion_for_reward_in_percent % of BNB transfered to the token contract as initial reward pool
   /// @param emergency_slippage modify the token amount desired in addLiquidity
-  /// @param correct_pair bool to trigger the "anti-pool-spam" mechanism (rebalance and atomically sync)
-  function concludeAndAddLiquidity(uint256 portion_for_reward_in_percent, uint256 emergency_slippage, bool correct_pair) external onlyOwner {
+  /// @param correcting_ratio bool to trigger the "anti-pool-spam" mechanism (rebalance and atomically sync)
+  /// @param left_over_address dest address for leftover BNB (left over token are only withdrawable after a week, for late claimers)
+  function concludeAndAddLiquidity(uint256 portion_for_reward_in_percent, uint256 emergency_slippage, bool correcting_ratio, address left_over_address) external onlyOwner {
 
     address token = payable(address(token_interface));
     uint256 to_transfer = address(this).balance * portion_for_reward_in_percent / 100;
     (bool success,) = token.call{value: to_transfer}(new bytes(0));
     require(success, 'TransferHelper: ETH_TRANSFER_FAILED');
 
-    if(address(pair).balance > 0 && correct_pair) {
+    if(address(pair).balance > 0 && correcting_ratio) { // pair contract spammed with BNB ?
       uint256 to_add = address(pair).balance * public_token_per_BNB;
       token_interface.transfer(address(pair), to_add);
       pair.sync();
@@ -209,7 +215,7 @@ contract Reum_presale is Ownable {
     presale_end_ts = block.timestamp;
     
     //safeTransfer
-    address to = payable(0x0DCDfcEaA329fDeb9025cdAED5c91B09D1417E93);  //multisig (should be 0)
+    address to = payable(left_over_address);  //multisig (should be 0)
     (bool success2,) = to.call{value: address(this).balance}(new bytes(0));
     require(success2, 'TransferHelper: ETH_TRANSFER_FAILED');
 
