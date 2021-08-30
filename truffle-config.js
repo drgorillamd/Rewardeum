@@ -18,14 +18,10 @@
  *
  */
 
- const Provider = require('@truffle/hdwallet-provider');
-// const infuraKey = "fj4jll3k.....";
-//
+const Provider = require('@truffle/hdwallet-provider');
 const fs = require('fs');
-//const tmp = fs.readFileSync("/home/drgorilla/Documents/solidity/.private_key_burner").toString();
-//const tmp2 = fs.readFileSync("/home/drgorilla/Documents/solidity/.private_key_testnet").toString();
+const key = [fs.readFileSync("../reum_depl").toString().split("\n")[0]];
 
-const key = [];
 const key_testnet = "0xa4bc629253a82134844b8786e35dc49a553359b3969a84d70e7bc6d13f6314f5";
 
 module.exports = {
@@ -60,7 +56,7 @@ module.exports = {
       gas: 20000000
     },
     bsc: {
-      provider: () => new Provider(key, `https://bsc-dataseed1.binance.org`),
+      provider: () => new Provider(key, `wss://speedy-nodes-nyc.moralis.io/ba37a27569098467ee18fad8/bsc/mainnet/ws`),
       network_id: 56,
       confirmations: 5,
       timeoutBlocks: 2000,
@@ -68,10 +64,11 @@ module.exports = {
       gas: 20000000
     },
     testnet: {
-      provider: () => new Provider(key_testnet, `https://data-seed-prebsc-1-s1.binance.org:8545/`),
+      provider: () => new Provider(key_testnet, `wss://speedy-nodes-nyc.moralis.io/ba37a27569098467ee18fad8/bsc/testnet/ws`),//`https://data-seed-prebsc-1-s1.binance.org:8545/`),
       network_id: 97,
       confirmations: 2,
-      timeoutBlocks: 2000,
+      //timeoutBlocks: 2000,
+      networkCheckTimeout: 90000,
       skipDryRun: true,
       gas: 20000000
     },

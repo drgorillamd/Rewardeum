@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-pragma solidity ^0.8.0;
+pragma solidity 0.8.0;
 
 import "@openzeppelin/contracts/token/ERC721/extensions/ERC721Enumerable.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
@@ -30,12 +30,14 @@ contract REUM_ticket is ERC721Enumerable, Ownable {
         if(block.timestamp >= 1630443600 || curr_supply > nb_tickets_max) running = false; //31-Aug-2021 21:00 UTC
         require(running, "Minting not active anymore");
 
-        uint256 nb_nft = _tokenIds + nb_tickets >= nb_tickets_max ? nb_tickets_max - curr_supply : nb_tickets;    
+        uint256 nb_nft = _tokenIds + nb_tickets >= nb_tickets_max ? nb_tickets_max - curr_supply : nb_tickets;
 
+        uint256 tmp_tokenId = _tokenIds;
         for (uint i = 0; i < nb_nft; i++) {
-            _tokenIds++;
-            _mint(receiver, _tokenIds);
+            tmp_tokenId++;
+            _mint(receiver, tmp_tokenId);
         }
+        _tokenIds = tmp_tokenId;
 
     }
 

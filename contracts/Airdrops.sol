@@ -9,7 +9,6 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 contract Reum_airdrop is Ownable {
 
     IERC20 token_interface;
-    uint256 init_balance;
 
     constructor (address _contract) {
         token_interface = IERC20(_contract);

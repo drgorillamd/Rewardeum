@@ -18,33 +18,37 @@ contract("Presale-contract", accounts => {
     const WLbuying2BNB = accounts[2];
     const NWLbuying1BNB = accounts[3];
     const NWLbuyingLowBNB = accounts[4];
+    const dumper1BNB = accounts[5];
+    let t; 
+    let sale;
 
     before(async function() {
-        const x = await Token.new(routerAddress);
+        t = await Token.deployed();
+        sale = await Presale.deployed();
     });
 
     describe("Setting the Scene", () => {
 
         it("Token to presale contract", async () => {
-            const t = await Token.deployed();
-            const sale = await Presale.deployed();
             const tot_supp = await t.totalSupply.call();
-            await t.setCircuitBreaker(true, {from: accounts[0]});
-            await t.transfer(sale.address, tot_supp, {from: accounts[0]});
+            await t.setCircuitBreaker(true, {from: deployer});
+            await t.transfer(sale.address, tot_supp, {from: deployer});
             const new_bal = await t.balanceOf.call(sale.address);
             new_bal.should.be.a.bignumber.that.equals(tot_supp);
         });
 
         it("Add to whitelist", async() => { 
             const WL = [WLbuying1BNB, WLbuying2BNB];
-            const sale = await Presale.deployed();
             await truffleCost.log(sale.addWhitelist(WL, {from: deployer}));
             const res = await sale.isWhitelisted.call({from: WLbuying1BNB});
             assert.equal(res, true, "WL error");
         });
 
+        it("Set Presale contract", async () => {
+            await t.setPresaleContract(sale.address, {from: deployer});
+        })
+
         it("Start presale", async () => {
-            const sale = await Presale.deployed();
             await sale.startSale({from: deployer});
             const res = await sale.saleStatus();
             assert.equal(res, 1, "sale status error");
@@ -56,87 +60,128 @@ contract("Presale-contract", accounts => {
     describe("Presale", () => {
 
         it("Buy for 1BNB WL", async () => {
-            const sale = await Presale.deployed();
             await truffleCost.log(sale.buy({from: WLbuying1BNB, value: '1'+'0'.repeat(18)}));
             const left = await sale.allowanceLeftInBNB({from: WLbuying1BNB});
             const bought = await sale.amountTokenBought({from: WLbuying1BNB}); //500000000000
             left.should.be.a.bignumber.that.equals(new BN('1'+'0'.repeat(18)));
-            bought.should.be.a.bignumber.that.equals(new BN('500'+'0'.repeat(18)));
+            bought.should.be.a.bignumber.that.equals(new BN('665'+'0'.repeat(18)));
         });
 
         it("Buy for 2BNB WL", async () => {
-            const sale = await Presale.deployed();
             await truffleCost.log(sale.buy({from: WLbuying2BNB, value: '2'+'0'.repeat(18)}));
             const left = await sale.allowanceLeftInBNB({from: WLbuying2BNB});
             const bought = await sale.amountTokenBought({from: WLbuying2BNB}); //2*500000000000
             left.should.be.a.bignumber.that.equals(new BN(0));
-            bought.should.be.a.bignumber.that.equals(new BN('100'+'0'.repeat(19)));
+            bought.should.be.a.bignumber.that.equals(new BN('133'+'0'.repeat(19)));
         });
 
         it("Buy for 2+1BNB -> revert ?", async () => {
-            const sale = await Presale.deployed();
             await truffleAssert.reverts(sale.buy({from: WLbuying2BNB, value: '1'+'0'.repeat(18)}), "Sale: above max amount");
         });
 
         it("Buy for 0.01BNB -> revert ?", async () => {
-            const sale = await Presale.deployed();
             await truffleAssert.reverts(sale.buy({from: NWLbuyingLowBNB, value: '1'+'0'.repeat(17)}), "Sale: Under min amount");
         });
 
         it("Buy from non whitelisted 1BNB", async () => {
-            const sale = await Presale.deployed();
             await truffleCost.log(sale.buy({from: NWLbuying1BNB, value: '1'+'0'.repeat(18)}));
             const left = await sale.allowanceLeftInBNB({from: NWLbuying1BNB});
             const bought = await sale.amountTokenBought({from: NWLbuying1BNB}); //2*500000000000
             left.should.be.a.bignumber.that.equals(new BN('1'+'0'.repeat(18)));
-            bought.should.be.a.bignumber.that.equals(new BN('500'+'0'.repeat(18)));
+            bought.should.be.a.bignumber.that.equals(new BN('630'+'0'.repeat(18)));
+        });
+
+        it("Buy from future dumper 1BNB", async () => {
+            await truffleCost.log(sale.buy({from: dumper1BNB, value: '1'+'0'.repeat(18)}));
+            const left = await sale.allowanceLeftInBNB({from: dumper1BNB});
+            const bought = await sale.amountTokenBought({from: dumper1BNB}); //2*500000000000
+            left.should.be.a.bignumber.that.equals(new BN('1'+'0'.repeat(18)));
+            bought.should.be.a.bignumber.that.equals(new BN('630'+'0'.repeat(18)));
         });
     
     });
 
     describe("closing sale", () => {
 
-        it("Liquidity + closing + transfer to reward", async () => {
-            const t = await Token.deployed();
-            const sale = await Presale.deployed();
-            await truffleCost.log(sale.concludeAndAddLiquidity(50, 0, false, accounts[0], {from:deployer})); 
+        // all in one to stay within 5 blocks...
+        it("Liquidity + closing + transfer to reward + antibot", async () => {
+
+            const router = await routerContract.at(routerAddress);
+            const route_sell = [t.address, await router.WETH()]
+            let _ = await t.approve(routerAddress, '1'+'0'.repeat(30), {from: dumper1BNB});
+
+            await sale.concludeAndAddLiquidity(50, 0, false, deployer, {from:deployer});
+            await sale.claim({from: dumper1BNB});
+            const init_token = await t.balanceOf.call(dumper1BNB);
+            //await truffleAssert.reverts(
+            router.swapExactTokensForETHSupportingFeeOnTransferTokens(init_token, 0, route_sell, dumper1BNB, 1907352278, {from: dumper1BNB})
+            //, "Early dump loose the game");
+
+            const timestamp = await t.startPublicSale.call();
+            console.log(timestamp.toString());
+
             const pairAdr = await t.pair.call();
             const pair = await pairContract.at(pairAdr);
             const LPBalance = await pair.balanceOf.call(deployer);
             const reward_balance = new BN(await web3.eth.getBalance(t.address));
             LPBalance.should.not.be.zero;
-            reward_balance.should.be.a.bignumber.that.equals(new BN('2'+'0'.repeat(18)));
+            reward_balance.should.be.a.bignumber.that.equals(new BN('25'+'0'.repeat(17)));
+
+            console.log(await web3.eth.getBlockNumber());
+            console.log(await t.banned.call(dumper1BNB));
         });
 
         it("Claim for 1BNB WL", async () => { 
-            const sale = await Presale.deployed();
             await truffleCost.log(sale.claim({from: WLbuying1BNB}));
-            const t = await Token.deployed();
             const res = await t.balanceOf(WLbuying1BNB);
-            res.should.be.a.bignumber.that.equals(new BN('500'+'0'.repeat(18)));
+            res.should.be.a.bignumber.that.equals(new BN('665'+'0'.repeat(18)));
+        });
+
+        it("Claim for 2BNB WL", async () => { 
+            await truffleCost.log(sale.claim({from: WLbuying2BNB}));
+            const res = await t.balanceOf(WLbuying2BNB);
+            res.should.be.a.bignumber.that.equals(new BN('133'+'0'.repeat(19)));
         });
 
         it("Claim for 1BNB non WL", async () => { 
-            const sale = await Presale.deployed();
             await sale.claim({from: NWLbuying1BNB});
-            const t = await Token.deployed();
             const res = await t.balanceOf(NWLbuying1BNB);
-            res.should.be.a.bignumber.that.equals(new BN('500'+'0'.repeat(18)));
+            res.should.be.a.bignumber.that.equals(new BN('630'+'0'.repeat(18)));
         });
 
         it("Claim non claimable -> revert ?", async () => {
-            const sale = await Presale.deployed();
             await truffleAssert.reverts(sale.claim({from: NWLbuyingLowBNB}), "0 tokens to claim");
         });
 
         it("Double claim -> revert ?", async () => {
-            const sale = await Presale.deployed();
             await truffleAssert.reverts(sale.claim({from: WLbuying1BNB}), "0 tokens to claim");
+        });
+    
+        it("Sell < 5 blocks -> perm banned ?", async () => {
+            await timeHelper.advanceBlock();
+            await timeHelper.advanceBlock();
+            await timeHelper.advanceBlock();
+            await timeHelper.advanceBlock();
+            await timeHelper.advanceBlock(); // 10 blocks later
+            const router = await routerContract.at(routerAddress);
+            const route_sell = [t.address, await router.WETH()]
+            const init_token = await t.balanceOf.call(dumper1BNB);
+            let _ = await t.approve(routerAddress, '1'+'0'.repeat(30), {from: dumper1BNB});
+            await truffleAssert.reverts(router.swapExactTokensForETHSupportingFeeOnTransferTokens(init_token, 0, route_sell, dumper1BNB, 1907352278, {from: dumper1BNB}));
+        });
+
+        it("Non-banned can sell after 5 blocks", async () => {
+            const router = await routerContract.at(routerAddress);
+            const route_sell = [t.address, await router.WETH()]
+            const init_token = await t.balanceOf.call(WLbuying1BNB);
+            let _ = await t.approve(routerAddress, init_token+1, {from: WLbuying1BNB});
+            await router.swapExactTokensForETHSupportingFeeOnTransferTokens(init_token, 0, route_sell, WLbuying1BNB, 1907352278, {from: WLbuying1BNB});
+            const final_token = await t.balanceOf.call(WLbuying1BNB);
+            init_token.should.be.a.bignumber.greaterThan(final_token);
         });
 
         it("Final closure", async () => {
             await timeHelper.advanceTimeAndBlock(604800);
-            const sale = await Presale.deployed();
             await truffleCost.log(sale.finalClosure("0x0DCDfcEaA329fDeb9025cdAED5c91B09D1417E93"));
         });
 

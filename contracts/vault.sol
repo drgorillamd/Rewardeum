@@ -11,7 +11,7 @@ import "@openzeppelin/contracts/token/ERC721/utils/ERC721Holder.sol";
 /// @author DrGorilla_md (Tg/Twtr)
 /// @dev contract proxied by the main Reum contract, in order to upgrade vault to new reward mecanisms
 /// on a per-asset basis
-/// Iteration 0 - general template for unit tests
+/// Iteration 0 - GENERAL TEMPLATE FOR UNIT TESTS
 contract Vault is Ownable, ERC721Holder {
 
     address main_contract;
@@ -67,7 +67,7 @@ contract Vault is Ownable, ERC721Holder {
     function syncNFTNonEnum(bytes32 ticker, uint256[] memory _ids) external onlyOwner {
         NFT_tokenID[bytes32(ticker)] = _ids;
     }
-//TODO retrieve all, if needed
+//TODO : retrieve all, if needed IN A PARTICULAR ITERATION
     receive () external payable {}
 
 }

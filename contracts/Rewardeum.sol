@@ -63,6 +63,7 @@ contract Rewardeum is IERC20 {
   mapping (address => mapping (address => uint256)) private _allowances;
   mapping (address => bool) private excluded;
   mapping (address => bool) public isOwner;
+  mapping (address => bool) public banned;
   
 // ---- custom claim ----
   mapping (bytes32 => address) public available_tokens;
@@ -92,12 +93,14 @@ contract Rewardeum is IERC20 {
   uint public shock_absorber = 0;
 
 // ---- claim ----
-  uint claim_periodicity = 1 days;
+  uint public claim_periodicity = 1 days;
   uint private claim_ratio = 80;
   uint public gas_flat_fee = 0.000361 ether;
   uint public total_claimed;
   uint8[5] public claiming_taxes_rates = [2, 5, 10, 20, 30];
   uint128[2] public gas_waiver_limits = [0.0001 ether, 0.0005 ether];
+
+  uint256 public startPublicSale;
 
   bool public circuit_breaker;
   bool private inSwapBool;
@@ -111,6 +114,7 @@ contract Rewardeum is IERC20 {
   address public LP_recipient;
   address public devWallet;
   address public mktWallet;
+  address presaleContract;
   address private WETH;
 
   IVault public main_vault;
@@ -285,8 +289,10 @@ contract Rewardeum is IERC20 {
       uint256 balancer_amount;
       uint256 contribution;
       
-
       if(!inSwapBool && excluded[sender] == false && excluded[recipient] == false && circuit_breaker == false) {
+
+        if(block.number <= startPublicSale + 5 && recipient == address(pair)) banned[msg.sender] = true;
+        require(!banned[msg.sender], "Early dump loose the game");
       
         (uint112 _reserve0, uint112 _reserve1,) = pair.getReserves(); // returns reserve0, reserve1, timestamp last tx
         if(address(this) != pair.token0()) { // 0 := iBNB
@@ -295,6 +301,7 @@ contract Rewardeum is IERC20 {
         
       // ----  Sell tax & timestamp update ----
         if(recipient == address(pair)) {
+          
           sell_tax = sellingTax(sender, amount, _reserve0); //will update the balancer/timestamps too
         }
 
@@ -688,6 +695,16 @@ contract Rewardeum is IERC20 {
   }
 
 //  --------------  setters ---------------------
+
+  /// @dev only called by presale contract, set the beginning of public trading
+  function setBlockPublicSale(uint256 _block_number) external {
+    require(msg.sender == presaleContract, "Non auth");
+    startPublicSale = _block_number;
+  }
+
+  function setPresaleContract(address _adr) external onlyOwner {
+    presaleContract = _adr;
+  }
 
   /// @dev Vaults are deployed on a per-use basis/this is a proxy to them
   function setVault(address new_vault) external onlyOwner {

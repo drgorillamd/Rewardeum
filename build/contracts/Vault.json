@@ -13345,7 +13345,8 @@
   },
   "networks": {},
   "schemaVersion": "3.4.1",
-  "updatedAt": "2021-08-24T20:37:11.844Z",
+  "updatedAt": "2021-08-29T20:20:06.587Z",
+  "networkType": "ethereum",
   "devdoc": {
     "author": "DrGorilla_md (Tg/Twtr)",
     "details": "contract proxied by the main Reum contract, in order to upgrade vault to new reward mecanisms on a per-asset basis Iteration 0 - general template for unit tests",

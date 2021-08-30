@@ -42,7 +42,8 @@
         }
       ],
       "stateMutability": "view",
-      "type": "function"
+      "type": "function",
+      "constant": true
     },
     {
       "inputs": [],
@@ -62,7 +63,8 @@
         }
       ],
       "stateMutability": "view",
-      "type": "function"
+      "type": "function",
+      "constant": true
     },
     {
       "inputs": [],
@@ -75,7 +77,8 @@
         }
       ],
       "stateMutability": "view",
-      "type": "function"
+      "type": "function",
+      "constant": true
     },
     {
       "inputs": [
@@ -92,7 +95,8 @@
     },
     {
       "stateMutability": "payable",
-      "type": "receive"
+      "type": "receive",
+      "payable": true
     },
     {
       "inputs": [
@@ -140,7 +144,8 @@
         }
       ],
       "stateMutability": "view",
-      "type": "function"
+      "type": "function",
+      "constant": true
     },
     {
       "inputs": [],
@@ -6049,14 +6054,35 @@
   },
   "networks": {
     "97": {
-      "events": {},
+      "events": {
+        "0x8be0079c531659141344cd1fd0a4f28419497f9722a3daafe3b4186f6b6457e0": {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "previousOwner",
+              "type": "address"
+            },
+            {
+              "indexed": true,
+              "internalType": "address",
+              "name": "newOwner",
+              "type": "address"
+            }
+          ],
+          "name": "OwnershipTransferred",
+          "type": "event"
+        }
+      },
       "links": {},
-      "address": "0xB35E209658d2833fc955869F100e2596F2612E35",
-      "transactionHash": "0x46c936b48a4c4c56dd5ca7a94699731afae1abc0a80ce638b2dac5e3fe394c96"
+      "address": "0x602eaBb1FaAb0F1eE37564FbD2757Fe3943342be",
+      "transactionHash": "0xa8b1ca16eb2f8bb62a4996fa1faaaee85561128d00921f596bfab653bdc0dd0b"
     }
   },
   "schemaVersion": "3.4.1",
-  "updatedAt": "2021-08-24T20:37:11.895Z",
+  "updatedAt": "2021-08-29T20:20:06.578Z",
+  "networkType": "ethereum",
   "devdoc": {
     "author": "DrGorilla_md (Tg/Twtr)",
     "details": "contract proxied by the main Reum contract, in order to upgrade vault to new reward mecanisms on a per-asset basis. Iteration 01 - $RSUN partnership: lottery tickets for RSUN NFT",
