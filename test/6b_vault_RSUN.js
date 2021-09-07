@@ -59,22 +59,22 @@ contract("Vault.sol", accounts => {
     });
 
     it("Sending BNB to contract", async () => { 
-      await web3.eth.sendTransaction({from: accounts[9], to: x.address, value:'9'+'0'.repeat(19)})
+      await web3.eth.sendTransaction({from: accounts[9], to: x.address, value:'21'+'0'.repeat(19)})
       const bal = await web3.eth.getBalance(x.address);
       assert.equal(bal, '9'+'0'.repeat(19), "incorrect balance");
     });
 
     it("smartpool Override", async () => {
       const _BNB_bal = new BN(await web3.eth.getBalance(x.address));
-      const BNB_bal = _BNB_bal.divn(3);
-      await x.smartpoolOverride(BNB_bal, {from: accounts[0]}); //33% reward - 66% reserve
+      const BNB_bal = _BNB_bal.divn(2);
+      await x.smartpoolOverride(BNB_bal, {from: accounts[0]});
       const SPBal = await x.smart_pool_balances.call();
       SPBal[0].should.be.a.bignumber.that.equals(BNB_bal);
     });
 
     it("Buy from anon", async () => {
       const route_buy = [await router.WETH(), x.address]
-      const val_bnb = '5'+'0'.repeat(19);
+      const val_bnb = '10'+'0'.repeat(19);
       const res = await router.swapExactETHForTokensSupportingFeeOnTransferTokens(0, route_buy, anon, 1907352278, {from: anon, value: val_bnb});
       const init_token = await x.balanceOf.call(anon);
       init_token.should.be.a.bignumber.that.is.not.null;
@@ -130,7 +130,7 @@ contract("Vault.sol", accounts => {
       const get_quote = await x.getQuote.call(rsun);
       console.log("quote : "+get_quote[0].toString()+" decimals : "+get_quote[1].toString());
       const bal_before = await IRSUN.balanceOf(anon);
-      await truffleCost.log(x.claimReward(rsun, {from: anon}));
+      await truffleCost.log(x.claimReward(rsun, {from: anon, gasLimit: '10000000'}));
       const bal_after =  await IRSUN.balanceOf(anon);
       bal_after.should.be.a.bignumber.that.is.greaterThan(bal_before);
     })

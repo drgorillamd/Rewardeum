@@ -28,6 +28,8 @@ module.exports = function(deployer, network) {
   else if (network=="testnet") {
     deployer.then(async () => {
       await deployer.deploy(Rewardeum, BSC_test_routeur);
+      await deployer.deploy(Reum_presale, BSC_test_routeur, Rewardeum.address);
+      await deployer.deploy(Reum_airdrop, Rewardeum.address);
       await deployer.deploy(vault_rsun, Rewardeum.address);
     })
   }

@@ -21,7 +21,7 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 contract Reum_presale is Ownable {
 
-  mapping (address => uint256) amountBought;
+  mapping (address => uint256) public amountBought;
   mapping (address => bool) public whiteListed;
 
   enum status {
@@ -33,21 +33,22 @@ contract Reum_presale is Ownable {
   status public sale_status;
 
   uint256 public presale_end_ts;
-  uint256 public presale_token_per_BNB = 500;  //pre-sale price (500b/1BNB) AKA (500*10**9*10**9)/10**18
-  uint256 public public_token_per_BNB = 400; //public pancake listing (400b/1BNB)
+  uint256 public presale_token_per_BNB = 630;  //pre-sale price (630B/1BNB) AKA (630*10**9*10**9)/10**18
+  uint256 public whitelist_token_per_BNB = 665;
+  uint256 public public_token_per_BNB = 595; //public pancake listing
 
   uint256 public total_bought;
   uint256 public total_claimed;
 
-  struct track {
-    uint128 whiteQuota;      //80 * 10**12 * 10**9; 80T whitelist
-    uint128 presaleQuota;    //180 * 10**12 * 10**9; 180T presale
-    uint128 liquidityQuota;  //327 * 10**12 * 10**9;  338T public
-    uint128 sold_in_private; //track the amount bought by non-whitelisted
-    uint128 sold_in_whitelist;
+  struct track { //use to be uint128, but totalSupply's are growing exponentially...
+    uint256 whiteQuota;      //16625 * 10**10 * 10**9; 166.25T whitelist
+    uint256 presaleQuota;    //189 * 10**12 * 10**9; 189 presale
+    uint256 liquidityQuota;  //229075 * 10**9 * 10**9;  229.075 public
+    uint256 sold_in_private; //track the amount bought by non-whitelisted
+    uint256 sold_in_whitelist;
   }
 
-  track public Quotas = track(80 * 10**12 * 10**9, 180 * 10**12 * 10**9, 327 * 10**12 * 10**9, 0, 0);
+  track public Quotas = track(16625 * 10**10 * 10**9, 189 * 10**12 * 10**9, 229075 * 10**9 * 10**9, 0, 0);
   
   IERC20 public token_interface;
   IUniswapV2Router02 router;
@@ -135,13 +136,17 @@ contract Reum_presale is Ownable {
     require(msg.value >= 2 * 10**17, "Sale: Under min amount"); // <0.2 BNB
     require(amountBought[msg.sender] + msg.value <= 2*10**18, "Sale: above max amount"); // >2bnb
 
-    uint128 amountToken = uint128(msg.value * presale_token_per_BNB);
+    bool whiteListed_adr = whiteListed[msg.sender];
+    uint256 amountToken;
 
-    require(amountToken <= tokenLeftForPrivateSale() || (whiteListed[msg.sender] && amountToken <= tokenLeftForWhitelistSale()), "Sale: Not enough token left");
-
-    if(whiteListed[msg.sender]) {
+    if(whiteListed_adr) {
+      amountToken = msg.value * whitelist_token_per_BNB;
+      require(amountToken <= tokenLeftForWhitelistSale(), "Sale: No token left in whitelist");
       Quotas.sold_in_whitelist += amountToken;
-    } else {
+    }
+    else {
+      amountToken = msg.value * presale_token_per_BNB;
+      require(amountToken <= tokenLeftForPrivateSale(), "Sale: No token left in presale");
       Quotas.sold_in_private += amountToken;
     }
 
@@ -155,7 +160,8 @@ contract Reum_presale is Ownable {
   }
   
   function amountTokenBought() external view returns (uint256) {
-    return amountBought[msg.sender] * presale_token_per_BNB;
+    uint256 amountToken = whiteListed[msg.sender] ? whitelist_token_per_BNB * amountBought[msg.sender] : presale_token_per_BNB * amountBought[msg.sender];
+    return amountToken;
   }
 
 
@@ -163,7 +169,7 @@ contract Reum_presale is Ownable {
 
   function claim() external postSale {
     require(amountBought[msg.sender] > 0, "0 tokens to claim");
-    uint256 amountToken = presale_token_per_BNB * amountBought[msg.sender];
+    uint256 amountToken = whiteListed[msg.sender] ? whitelist_token_per_BNB * amountBought[msg.sender] : presale_token_per_BNB * amountBought[msg.sender];
     amountBought[msg.sender] = 0;
     total_claimed += amountToken;
     token_interface.transfer(msg.sender, amountToken);
@@ -236,7 +242,7 @@ contract Reum_presale is Ownable {
   }
 
   fallback () external payable {
-    revert();
+    revert("Don't you dare");
   }
 
 }

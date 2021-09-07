@@ -25,17 +25,18 @@ contract REUM_ticket is ERC721Enumerable, Ownable {
     }
 
     function mintTicket(address receiver, uint256 nb_tickets) external onlyOwner {
-        uint256 curr_supply = _tokenIds;
+        uint256 curr_id = _tokenIds;
 
-        if(block.timestamp >= 1630443600 || curr_supply > nb_tickets_max) running = false; //31-Aug-2021 21:00 UTC
+        if(block.timestamp >= 1631134800 || curr_id > nb_tickets_max) running = false; //08-Sep-2021 21:00 UTC
         require(running, "Minting not active anymore");
 
-        uint256 nb_nft = _tokenIds + nb_tickets >= nb_tickets_max ? nb_tickets_max - curr_supply : nb_tickets;    
+        uint256 nb_nft = curr_id + nb_tickets >= nb_tickets_max ? nb_tickets_max - curr_id : nb_tickets;    
 
         for (uint i = 0; i < nb_nft; i++) {
-            _tokenIds++;
-            _mint(receiver, _tokenIds);
+            curr_id++;
+            _mint(receiver, curr_id);
         }
+        _tokenIds = curr_id;
 
     }
 

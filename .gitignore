@@ -105,10 +105,9 @@ dist
 node_modules/
 workspace.code-workspace
 tenderly.yaml
-build/contracts/projectX.json
-build/contracts/projectX.json
-build/contracts/projectX.json
+build/
 ._.DS_Store
 data/
 frontend/
 package-lock.json
+node_controllers/

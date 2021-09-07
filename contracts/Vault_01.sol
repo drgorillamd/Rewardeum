@@ -13,7 +13,7 @@ import "./REUM_ticket.sol";
 /// Iteration 01 - $RSUN partnership: lottery tickets for RSUN NFT
 contract Vault_01 is Ownable {
 
-    uint256 public ticket_price = 3000000000000000;
+    uint256 public ticket_price = 200000000000000000;
     address main_contract;
     REUM_ticket public ticket_contract;
 
