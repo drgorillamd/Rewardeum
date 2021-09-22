@@ -29,8 +29,8 @@ contract VaultLast {
         owners[msg.sender] = true;
     }
 
-    function newLottery(bytes32 ticker, uint256 price, uint256 deadline, uint256 nb_tickets) external onlyOwner {
-        active_contracts[ticker] = new REUMGenericTicket(deadline, nb_tickets, current_id);
+    function newLottery(bytes32 ticker, uint256 price, uint256 deadline, uint256 nb_tickets, string memory ticketName) external onlyOwner {
+        active_contracts[ticker] = new REUMGenericTicket(deadline, nb_tickets, current_id, ticketName);
         prices[ticker] = price;
         current_id++;
     }

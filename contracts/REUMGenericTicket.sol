@@ -16,15 +16,18 @@ contract REUMGenericTicket is ERC721Enumerable, Ownable {
 
     uint256 private _tokenIds;
     uint256 public nb_tickets_max;
-    uint256 id;
+    uint256 public id;
     bool running;
     uint256 public deadline;
 
-    constructor(uint256 _deadline, uint256 _max, uint256 _id) ERC721("LOTTERY", "REUMxRSUN") {
+    string ticketName;
+
+    constructor(uint256 _deadline, uint256 _max, uint256 _id, string memory _ticketName) ERC721("LOTTERY", string(abi.encodePacked("REUM-", _ticketName))) {
         running = true;
         deadline = _deadline;
         nb_tickets_max = _max;
         id = _id;
+        ticketName = _ticketName;
     }
 
     function mintTicket(address receiver, uint256 nb_tickets) external onlyOwner {
@@ -45,12 +48,7 @@ contract REUMGenericTicket is ERC721Enumerable, Ownable {
 
     function tokenURI(uint256 token_id) public view override returns (string memory) {
         require(_exists(token_id), "Invalid ticket number");
-        return string(abi.encodePacked("https://www.rewardeum.com/images/metadata", id, ".json"));
-    }
-
-
-    function contractURI() public view returns (string memory) {
-        return string(abi.encodePacked("https://www.rewardeum.com/images/contract_uri", id, ".json"));
+        return string(abi.encodePacked("https://www.rewardeum.com/images/metadata-", ticketName, ".json"));
     }
 
     function isRunning() external view returns (bool) {

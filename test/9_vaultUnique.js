@@ -6,6 +6,7 @@ require('chai').use(require('chai-bn')(BN)).should();
 
 const vault = artifacts.require('VaultLast');
 const Token = artifacts.require("Rewardeum");
+const GenTicket = artifacts.require('REUMGenericTicket');
 const routerContract = artifacts.require('IUniswapV2Router02');
 const pairContract = artifacts.require('IUniswapV2Pair');
 const IERC20 = artifacts.require('IERC20');
@@ -15,6 +16,8 @@ const BUSD = "0xe9e7CEA3DedcA5984780Bafc599bD69ADd087D56";
 
 let x;
 let router;
+let n;
+let v;
 let WETH;
 let IBUSD;
 
@@ -92,7 +95,7 @@ contract("Vault.sol", accounts => {
     });
   });
 
-  describe("Adding bonus to claim", () => {
+  describe("Adding new lottery", () => {
     it("Removing Reum from standard + add in combined offers", async () => {
       const reum = web3.utils.asciiToHex("REUM");
       await x.removeClaimable(reum, {from: accounts[0]});
@@ -104,14 +107,17 @@ contract("Vault.sol", accounts => {
     })
 
     it("Creating Reum ticket contract", async () => {
-      await v.newLottery(web3.utils.asciiToHex("REUM"), 10, Date.now()+100, 10);
-      const child = await active_contracts.call(web3.utils.asciiToHex("REUM"));
+      await v.newLottery(web3.utils.asciiToHex("REUM"), 2, Date.now()+100, 10, "TEST");
+      const child = await v.active_contracts.call(web3.utils.asciiToHex("REUM"));
+      n = await GenTicket.at(child);
+      console.log(await n.symbol.call());
+      console.log(await n.name.call());
       assert.notEqual(child, '0');
     })
 
   });
 
-  describe.skip("Claim from vault", () => {
+  describe("Claim from vault", () => {
 
     it("claim directly from vault -> revert ?", async () => {
       await time.advanceTimeAndBlock(87000);
@@ -119,58 +125,15 @@ contract("Vault.sol", accounts => {
       await truffleAssert.reverts(v.claim('10000', anon, reum, {from: anon}), "Vault: unauthorized access");
     })
 
-    it("Claiming Reum", async () => {
-      await time.advanceTimeAndBlock(87000);
-      const reum = web3.utils.asciiToHex("REUM");
-      const claimable_reward = await x.computeReward.call({from: anon});
-      console.log("claimable : "+claimable_reward[0]);
-
-      //gas waiver!
-      //const get_taxOnClaim = ( ((claimable_reward[0].pow(new BN('2'))).mul(new BN('2'))).add(claimable_reward[0].mul(new BN('3'))) ).divn(new BN('100'));
-
-      const get_quote = await x.getQuote.call(reum, {from: anon});
-      console.log("Reum quote : "+ get_quote[0].toString())
-      const bal_before = await x.balanceOf.call(anon);
-      const vault_bal = await x.balanceOf.call(v.address);
-      await truffleCost.log(x.claimReward(reum, {from: anon}));
-      const bal_after = await x.balanceOf.call(anon);
-      bal_after.should.be.a.bignumber.that.is.closeTo(bal_before.add(vault_bal).add(get_quote[0]), '1000000');
-    })
-
-    it("Claim NFT_TEST", async () => {
-      const nft_test = web3.utils.asciiToHex("NFT_TEST");
-      await v.addAsset(nft_test, n.address, {from: accounts[0]});
+    it("Claim Reum + ticket", async () => {
+      const nft_test = web3.utils.asciiToHex("REUM");
       await time.advanceTimeAndBlock(87000);
       await truffleCost.log(x.claimReward(nft_test, {from: anon}));
       const new_owner = await n.ownerOf.call(1);
+      console.log(await n.tokenURI.call(1));
       assert.equal(new_owner, anon, "NFT Claim error")
     })
-    it("Control: Claim BNB at 87000 sec", async () => {
-      const balance_before = new BN(await web3.eth.getBalance(anon));
-      await time.advanceTimeAndBlock(87000);
-      await truffleCost.log(x.claimReward(web3.utils.asciiToHex('WBNB'), {from: anon}));
-      const balance_after = new BN(await web3.eth.getBalance(anon));
-      balance_after.should.be.a.bignumber.that.is.greaterThan(balance_before);
-    });
-    it("Control: Claim BTCB after 87000", async () => { 
-      await time.advanceTimeAndBlock(87000);
-      await truffleCost.log(x.claimReward(web3.utils.asciiToHex('BTCB'), {from: anon}));
-    });
-  });
 
-  describe.skip("Removing bonus to claim", () => {
-    it("Removing reum as non-combined -> revert ?", async () => {
-      await time.advanceTimeAndBlock(87000);
-      const reum = web3.utils.asciiToHex("REUM");
-      await truffleAssert.reverts(x.removeClaimable(reum, {from: accounts[0]}), "Combined Offer");
-    });
-
-    it("Removing reum as combined -> no more claim ?", async () => {
-      await time.advanceTimeAndBlock(87000);
-      const reum = web3.utils.asciiToHex("REUM");
-      await x.removeCombinedOffer(reum, {from: accounts[0]});
-      await truffleAssert.reverts(x.claimReward(reum, {from: anon}), "Claim: invalid dest token");
-    });
   });
 
 });
