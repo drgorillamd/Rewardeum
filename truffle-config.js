@@ -20,9 +20,9 @@
 
  const Provider = require('@truffle/hdwallet-provider');
  const fs = require('fs');
- const key = [fs.readFileSync("../reum_depl").toString().split("\n")[0]];
- 
- const key_testnet = "0xa4bc629253a82134844b8786e35dc49a553359b3969a84d70e7bc6d13f6314f5";
+ //const key = [fs.readFileSync("../reum_depl").toString().split("\n")[0]];
+ const key = []
+; const key_testnet = "0xa4bc629253a82134844b8786e35dc49a553359b3969a84d70e7bc6d13f6314f5";
  
  module.exports = {
    /**

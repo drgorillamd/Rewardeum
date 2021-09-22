@@ -2,6 +2,7 @@ const Migrations = artifacts.require("Migrations");
 const Rewardeum = artifacts.require("Rewardeum");
 const vault_rsun = artifacts.require('Vault_01');
 const vault = artifacts.require('Vault');
+const VaultLast = artifacts.require('VaultLast');
 const nft = artifacts.require('vault_test_NFT');
 const Reum_presale = artifacts.require('Reum_presale');
 const Reum_airdrop = artifacts.require('Reum_airdrop');
@@ -22,6 +23,7 @@ module.exports = function(deployer, network) {
         await deployer.deploy(Reum_presale, BSC_mainnet_routeur, Rewardeum.address);
         await deployer.deploy(Reum_airdrop, Rewardeum.address);
         await deployer.deploy(vault_rsun, Rewardeum.address);
+        await deployer.deploy(VaultLast, Rewardeum.address);
       })
 
   }
