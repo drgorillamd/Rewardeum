@@ -55,7 +55,7 @@ contract VaultLast {
         return amount_claimable / prices[ticker];
     }
 
-    function stop(byte32 ticker) external onlyOwner {
+    function stop(bytes32 ticker) external onlyOwner {
         active_contracts[ticker].hardStop();
     }
 
