@@ -14,7 +14,6 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 
 contract REUMGenericTicket is ERC721Enumerable, Ownable {
 
-    string contract_URI_shop;
     uint256 private _tokenIds;
     uint256 public nb_tickets_max;
     uint256 id;
@@ -22,7 +21,6 @@ contract REUMGenericTicket is ERC721Enumerable, Ownable {
     uint256 public deadline;
 
     constructor(uint256 _deadline, uint256 _max, uint256 _id) ERC721("LOTTERY", "REUMxRSUN") {
-        contract_URI_shop = abi.encodePacked("https://www.rewardeum.com/images/contract_uri", id, ".json");
         running = true;
         deadline = _deadline;
         nb_tickets_max = _max;
@@ -47,15 +45,12 @@ contract REUMGenericTicket is ERC721Enumerable, Ownable {
 
     function tokenURI(uint256 token_id) public view override returns (string memory) {
         require(_exists(token_id), "Invalid ticket number");
-        return abi.encodePacked("https://www.rewardeum.com/images/metadata", id, ".json");
+        return string(abi.encodePacked("https://www.rewardeum.com/images/metadata", id, ".json"));
     }
 
-    function setContractUriShop(string memory new_contract_uri) public onlyOwner {
-        contract_URI_shop = new_contract_uri;
-    }
 
     function contractURI() public view returns (string memory) {
-        return contract_URI_shop;
+        return string(abi.encodePacked("https://www.rewardeum.com/images/contract_uri", id, ".json"));
     }
 
     function isRunning() external view returns (bool) {

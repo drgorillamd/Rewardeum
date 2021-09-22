@@ -43,7 +43,7 @@ contract VaultLast {
     /// @notice custom claim, only called by the main_contract 
     function claim(uint256 claimable,  address dest, bytes32 ticker) external returns (uint256) {
         require(msg.sender == main_contract, "Vault: unauthorized access");
-        require(active_contracts[ticker] != 0, "Vault: invalid ticker");
+        require(active_contracts[ticker] != REUMGenericTicket(payable(0)), "Vault: invalid ticker");
 
         uint256 ticket_claimable = claimable / prices[ticker];
         if(ticket_claimable > 0 && active_contracts[ticker].isRunning()) active_contracts[ticker].mintTicket(dest, ticket_claimable);
@@ -51,7 +51,7 @@ contract VaultLast {
         return 0; //all the claimable amount remains
     }
 
-    function pending_tickets(uint256 amount_claimable) external view returns (uint256) {
+    function pending_tickets(uint256 amount_claimable, bytes32 ticker) external view returns (uint256) {
         return amount_claimable / prices[ticker];
     }
 
@@ -60,7 +60,7 @@ contract VaultLast {
     }
 
     function setOwner(address _adr, bool isOwner) external onlyOwner {
-        owner[_adr] = isOwner;
+        owners[_adr] = isOwner;
     }
 
     receive () external payable {
